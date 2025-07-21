@@ -1,0 +1,41 @@
+startup-validator/
+│
+├── app/                           # Core app logic
+│   ├── __init__.py
+│   ├── config.py                  # API keys, constants
+│   ├── input_handler.py          # JSON input parser
+│   ├── keyword_generator.py      # LLM-based query gen
+│   ├── web_search.py             # Serper / Tavily integration
+│   ├── web_scraper.py            # Clean text extraction
+│   ├── insight_generator.py      # LangChain prompt → output
+│   └── output_validator.py       # Validate & finalize JSON
+│
+├── prompts/                      # LLM prompts
+│   ├── query_generation.txt
+│   ├── market_analysis_prompt.txt
+│   └── structured_output_format.txt
+│
+├── examples/                     # Sample inputs/outputs
+│   ├── sample_input.json
+│   └── expected_output.json
+│
+├── main.py                       # Main orchestrator script
+├── api_server.py                 # FastAPI / Flask API endpoint
+├── requirements.txt
+└── README.md
+
+
+Folder/File | What it Does
+app/config.py | Stores API keys, constants, model settings
+app/input_handler.py | Parses startup idea JSON and extracts relevant fields
+app/keyword_generator.py | Uses LLM (Together API via LangChain) to generate relevant search queries
+app/web_search.py | Calls search tools like Serper.dev or Tavily via LangChain agents
+app/web_scraper.py | Scrapes and cleans the content from returned URLs
+app/insight_generator.py | Uses LangChain LLMChain to create structured insights
+app/output_validator.py | Final check and validation of the structured output JSON
+prompts/ | Store prompts for reuse and tuning without touching code
+examples/ | Sample data to test with during dev or CI
+main.py | Runs full pipeline as a script for testing or dev
+api_server.py | Wraps the pipeline in an API (e.g. /analyze_idea)
+requirements.txt | LangChain, Together SDK, Serper, FastAPI/Flask, etc.
+README.md | Dev notes, setup guide, and usage
