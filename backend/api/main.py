@@ -105,22 +105,24 @@ def get_chat_summary(req: SummaryRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
 
 @app.post("/api/analysis/start", response_model=AnalysisResponse)
-def start_analysis(req: AnalysisRequest, background_tasks: BackgroundTasks):
+def start_analysis(req: AnalysisRequest, background_tasks: BackgroundTasks, user=Depends(get_current_user)):
     """Start analysis with provided startup data"""
+    uid = user["uid"]
     try:
         job_id = str(uuid.uuid4())
         
-        # Save job status
+        # Save job status with session_id link
         job_status = {
             "job_id": job_id,
             "status": "running",
             "progress": 0.0,
-            "message": "Analysis started"
+            "message": "Analysis started",
+            "session_id": req.startup_data.get("session_id", job_id)  # Link to session
         }
         redis_service.save_job_status(job_id, job_status)
         
         # Add background task
-        background_tasks.add_task(run_analysis_job, job_id, req.startup_data)
+        background_tasks.add_task(run_analysis_job, job_id, req.startup_data, uid)
         
         return AnalysisResponse(
             job_id=job_id,
@@ -144,17 +146,19 @@ def start_analysis_from_session(req: SummaryRequest, background_tasks: Backgroun
         startup_data = {
             "title": session_data.get("initial_idea", "Unknown Startup"),
             "description": "Extracted from chat session",
-            "conversation": session_data.get("conversation", [])
+            "conversation": session_data.get("conversation", []),
+            "session_id": req.session_id  # Include session_id
         }
         job_id = str(uuid.uuid4())
         job_status = {
             "job_id": job_id,
             "status": "running",
             "progress": 0.0,
-            "message": "Analysis started from session"
+            "message": "Analysis started from session",
+            "session_id": req.session_id  # Link to session
         }
         redis_service.save_job_status(job_id, job_status)
-        background_tasks.add_task(run_analysis_job, job_id, startup_data)
+        background_tasks.add_task(run_analysis_job, job_id, startup_data, uid)
         return AnalysisResponse(
             job_id=job_id,
             status="started",
@@ -176,8 +180,11 @@ def get_status(job_id: str):
     return AnalysisStatus(**job_status)
 
 @app.get("/api/analysis/{job_id}/result", response_model=AnalysisResult)
-def get_result(job_id: str):
-    """Get analysis results"""
+def get_result(job_id: str, user=Depends(get_current_user)):
+    """Get analysis results from user session"""
+    uid = user["uid"]
+    
+    # Get job status to find session_id
     job_status = redis_service.get_job_status(job_id)
     if not job_status:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -185,14 +192,24 @@ def get_result(job_id: str):
     if job_status["status"] != "completed":
         raise HTTPException(status_code=400, detail="Analysis not completed")
     
-    # Get results from Firebase
-    result = firebase_service.get_analysis_result(job_id)
+    # Get session_id from job status
+    session_id = job_status.get("session_id", job_id)
     
-    return AnalysisResult(
-        job_id=job_id,
-        status=job_status["status"],
-        result=result
-    )
+    # Get results from user session instead of separate storage
+    try:
+        session_data = get_user_session(uid, session_id, firebase_service)
+        result = session_data.get("complete_analysis")
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Analysis results not found")
+        
+        return AnalysisResult(
+            job_id=job_id,
+            status=job_status["status"],
+            result=result
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve results: {str(e)}")
 
 @app.get("/api/sessions/{session_id}", dependencies=[Depends(bearer_scheme)])
 def get_session_info(session_id: str, user=Depends(get_current_user)):
@@ -202,7 +219,8 @@ def get_session_info(session_id: str, user=Depends(get_current_user)):
         "session_id": session_id,
         "turn_count": session_data.get("turn_count", 0),
         "is_ready": session_data.get("is_ready", False),
-        "initial_idea": session_data.get("initial_idea", "")
+        "initial_idea": session_data.get("initial_idea", ""),
+        "analysis_status": session_data.get("analysis_status", "not_started")  # New field
     }
 
 @app.delete("/api/sessions/{session_id}", dependencies=[Depends(bearer_scheme)])
@@ -213,132 +231,81 @@ def clear_session(session_id: str, user=Depends(get_current_user)):
     redis_service.delete_session(session_id)
     return {"message": "Session cleared"}
 
-def run_analysis_job(job_id: str, startup_data: Dict[str, Any], user=Depends(get_current_user)):
-    """Run analysis job in background"""
+def run_analysis_job(job_id: str, startup_data: Dict[str, Any], uid: str):
+    """Run analysis job in background - saves only to user session"""
     try:
-        # Update status to running
+        # Get session_id from startup_data or fallback to job_id
+        session_id = startup_data.get("session_id", job_id)
+        
+        # Update session with analysis status
+        session_ref = firebase_service.db.collection('outputs').document(uid).collection('sessions').document(session_id)
+        session_ref.update({"analysis_status": "running"})
+        
+        # Update job status
         redis_service.save_job_status(job_id, {
             "job_id": job_id,
             "status": "running",
             "progress": 0.1,
-            "message": "Starting analysis pipeline"
+            "message": "Starting analysis pipeline",
+            "session_id": session_id
         })
-        uid = user["uid"]
-        session_id = startup_data.get("session_id") or job_id  # fallback to job_id if not present
-
         
-        # Run pipeline
+        # Run pipeline - this now saves directly to user session
         result = pipeline.run_pipeline(startup_data, uid, session_id)
         
-        # Save results to Firebase
-        firebase_service.save_analysis_result(job_id, result)
+        # Update session with completion status
+        session_ref.update({"analysis_status": "completed"})
         
-        # Update status to completed
+        # Update job status to completed (no duplicate result storage)
         redis_service.save_job_status(job_id, {
             "job_id": job_id,
             "status": "completed",
             "progress": 1.0,
-            "message": "Analysis completed successfully"
+            "message": "Analysis completed successfully",
+            "session_id": session_id
         })
         
     except Exception as e:
-        # Update status to failed
+        # Update session with error status
+        session_id = startup_data.get("session_id", job_id)
+        session_ref = firebase_service.db.collection('outputs').document(uid).collection('sessions').document(session_id)
+        session_ref.update({"analysis_status": "failed", "error": str(e)})
+        
+        # Update job status to failed
         redis_service.save_job_status(job_id, {
             "job_id": job_id,
             "status": "failed",
             "progress": 0.0,
-            "message": f"Analysis failed: {str(e)}"
+            "message": f"Analysis failed: {str(e)}",
+            "session_id": session_id
         })
 
-@app.post("/api/analysis/save_complete_analysis", response_model=CompleteAnalysisResponse)
-def save_complete_analysis(req: CompleteAnalysisRequest, background_tasks: BackgroundTasks):
-    """Save complete analysis to Firebase"""
-    try:
-        job_id = str(uuid.uuid4())
-        
-        job_status = {
-            "job_id": job_id,
-            "status": "running",
-            "progress": 0.0,
-            "message": "Saving complete analysis"
-        }
-        redis_service.save_job_status(job_id, job_status)
-        
-        background_tasks.add_task(
-            run_analysis_and_save_to_firebase, 
-            job_id, 
-            req.startup_data, 
-            req.session_id
-        )
-        
-        return CompleteAnalysisResponse(
-            job_id=job_id,
-            status="started",
-            message="Complete analysis started"
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to start complete analysis: {str(e)}"
-        )
+# COMMENTED OUT: Redundant analysis endpoints that used separate storage
+# @app.post("/api/analysis/save_complete_analysis", response_model=CompleteAnalysisResponse)
+# def save_complete_analysis(req: CompleteAnalysisRequest, background_tasks: BackgroundTasks):
+#     """Save complete analysis to Firebase"""
+#     # This is now handled by the main analysis pipeline
+#     pass
 
-def run_analysis_and_save_to_firebase(job_id: str, startup_summary: Dict[str, Any], session_id: str, user = Depends(get_current_user)):
-    """Run analysis and save to Firebase"""
-    try:
-        # Update status
-        redis_service.save_job_status(job_id, {
-            "job_id": job_id,
-            "status": "running",
-            "progress": 0.2,
-            "message": "Running analysis pipeline"
-        })
-        uid = user["uid"]
-        
-        # Run pipeline
-        result = pipeline.run_pipeline(startup_summary, uid, session_id)
-        
-        # Update status
-        redis_service.save_job_status(job_id, {
-            "job_id": job_id,
-            "status": "running",
-            "progress": 0.8,
-            "message": "Saving to Firebase"
-        })
-        
-        # Serialize for Firebase
-        def serialize_for_firebase(obj):
-            if isinstance(obj, (set, frozenset)):
-                return list(obj)
-            elif hasattr(obj, '__dict__'):
-                return obj.__dict__
-            else:
-                return str(obj)
-        
-        # Save to Firebase
-        firebase_service.save_output(session_id, result)
-        
-        # Update status to completed
-        redis_service.save_job_status(job_id, {
-            "job_id": job_id,
-            "status": "completed",
-            "progress": 1.0,
-            "message": "Analysis saved to Firebase"
-        })
-        
-    except Exception as e:
-        redis_service.save_job_status(job_id, {
-            "job_id": job_id,
-            "status": "failed",
-            "progress": 0.0,
-            "message": f"Analysis failed: {str(e)}"
-        })
+# def run_analysis_and_save_to_firebase(job_id: str, startup_summary: Dict[str, Any], session_id: str, uid: str):
+#     """Run analysis and save to Firebase"""
+#     # This functionality is now integrated into run_analysis_job
+#     pass
 
 @app.get("/api/analysis/results/{session_id}", dependencies=[Depends(bearer_scheme)])
 def get_analysis_results(session_id: str, user=Depends(get_current_user)):
+    """Get analysis results directly from user session"""
     uid = user["uid"]
     session_data = get_user_session(uid, session_id, firebase_service)
-    result = session_data.get("summary")
-    if not result:
-        raise HTTPException(status_code=404, detail="Analysis results not found")
-    return result
+    
+    # Check if analysis exists
+    complete_analysis = session_data.get("complete_analysis")
+    if not complete_analysis:
+        # Check if analysis is in progress
+        analysis_status = session_data.get("analysis_status", "not_started")
+        if analysis_status == "running":
+            raise HTTPException(status_code=202, detail="Analysis in progress")
+        else:
+            raise HTTPException(status_code=404, detail="Analysis results not found")
+    
+    return complete_analysis

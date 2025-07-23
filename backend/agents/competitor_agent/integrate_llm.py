@@ -4,12 +4,23 @@ from typing import Dict, List, Any
 from together import Together
 import os
 from dotenv import load_dotenv, find_dotenv
+from langchain_together import ChatTogether
+from langchain_core.messages import SystemMessage, HumanMessage
 
 load_dotenv(find_dotenv())
 
-TOGETHER_API_KEY = os.environ.get("TOGETHER_API_KEY2")
+# Multiple API keys for rotation
+TOGETHER_API_KEYS = [
+    os.environ.get("TOGETHER_API_KEY2"),
+    os.environ.get("TOGETHER_API_KEY3"),
+    os.environ.get("TOGETHER_API_KEY4"),
+    # Add more keys as needed
+]
 
-
+# Dynamic output directory creation
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'outputs')
+if not os.path.exists(OUTPUT_DIR):
+    os.makedirs(OUTPUT_DIR)
 
 def clean_json_to_text(data: Any, title="") -> str:
     text = f"\n📌 {title}:\n"
@@ -41,7 +52,7 @@ def clean_json_to_text(data: Any, title="") -> str:
 
 def load_json_files() -> Dict:
     try:
-        path1 = r"outputs/startup_summary.json"
+        path1 = os.path.join(OUTPUT_DIR, "startup_summary.json")
         with open(path1, 'r', encoding='utf-8') as f:
             startup_data = json.load(f)
         return startup_data
@@ -99,6 +110,7 @@ def prepare_optimized_prompt(startup_data: Dict, competitor_data: Dict) -> List[
             }
         }
         competitors_info.append(comp_info)
+    
     system_message = {
         "role": "system",
         "content": """You are a JSON generator. Your ONLY task is to return a valid JSON object.
@@ -112,7 +124,9 @@ def prepare_optimized_prompt(startup_data: Dict, competitor_data: Dict) -> List[
         You MUST give a feature score for each competitor companies that match with the startup features. 
         Make sure to give a score between 0-10. Also give the score only if the competitor company features match with the startup features.
         One and Only if many of the features doesn't match with the startup features then give feature score as 0 else provide the score.
-        Provide the feature score if their idealogy matches but the score must be around 1-3.
+        Provide the feature score around 1-3 if their idealogy matches and only few features matches it.
+        Provide the feature score around 4-6 if their idealogy matches and many features matches it.
+        Provide the feature score around 7-10 if their idealogy matches and all features matches it.
         The feature score should be different for each competitor company.
         You MUST NOT return any text before or after the JSON object.
         You MUST include all the competitors with the feature score greater than 0 in the competitors array.
@@ -176,7 +190,9 @@ IMPORTANT:
 17. Make sure to give a feature score between 0-10 for each competitor company based on the similarity of the features. 
 18. Make sure to give a valution score between 0-100 for each competitor company based all the details provided.
 19. One and Only if many of the features doesn't match with the startup features then give feature score as 0 else provide the score.
-20. Provide the feature score if their idealogy matches but the score must be around 1-3."""
+20. Provide the feature score around 1-3 if their idealogy matches and only few features matches it.
+21. Provide the feature score around 4-6 if their idealogy matches and many features matches it.
+22. Provide the feature score around 7-10 if their idealogy matches and all features matches it."""
     }
     return [system_message, user_message]
 
@@ -188,29 +204,49 @@ def is_valid_json(text: str) -> bool:
         return False
 
 def analyze_with_llm(messages: List[Dict], max_retries: int = 2) -> str:
+    # Convert messages to LangChain format
+    lc_messages = []
+    for msg in messages:
+        if msg["role"] == "system":
+            lc_messages.append(SystemMessage(content=msg["content"]))
+        elif msg["role"] == "user":
+            lc_messages.append(HumanMessage(content=msg["content"]))
     
-    client = Together()
-    for attempt in range(max_retries):
-        try:
-            response = client.chat.completions.create(
-                model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-                messages=messages,
-                max_tokens=600,
-                top_p=0.9
-            )
-            result = response.choices[0].message.content.strip()
-            result = result.replace("```json", "").replace("```", "").strip()
-            result = result.replace("\n", "").replace("  ", " ")
-            if not result.startswith("{"):
-                result = "{" + result
-            if not result.endswith("}"):
-                result = result + "}"
-            if is_valid_json(result):
-                return result
-        except Exception as e:
-            print(f"Attempt {attempt + 1} failed: {e}")
-            if attempt == max_retries - 1:
-                raise
+    # Try each API key in rotation
+    for key_index in range(len(TOGETHER_API_KEYS)):
+        api_key = TOGETHER_API_KEYS[key_index % len(TOGETHER_API_KEYS)]
+        if not api_key:  # Skip None/empty keys
+            continue
+            
+        llm = ChatTogether(
+            together_api_key=api_key,
+            model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+            max_tokens=5000,  # Increased token limit
+            top_p=0.9
+        )
+        
+        for attempt in range(max_retries):
+            try:
+                response = llm.invoke(lc_messages)
+                result = response.content.strip()
+                result = result.replace("```json", "").replace("```", "").strip()
+                result = result.replace("\n", "").replace("  ", " ")
+                if not result.startswith("{"):
+                    result = "{" + result
+                if not result.endswith("}"):
+                    result = result + "}"
+                if is_valid_json(result):
+                    return result
+            except Exception as e:
+                # Check for rate limit error (429 or model_rate_limit)
+                if ("429" in str(e)) or ("rate limit" in str(e).lower()) or ("model_rate_limit" in str(e)):
+                    print(f"Rate limit hit for key {key_index + 1}, trying next key...")
+                    break  # Try next key
+                print(f"Attempt {attempt + 1} failed with key {key_index + 1}: {e}")
+                if attempt == max_retries - 1:
+                    break  # Move to next key after max retries
+    
+    print("All API keys exhausted or failed")
     return "{}"
 
 def save_analysis_result(result: str, filename: str = 'competitor_analysis_result.json'):
@@ -229,22 +265,43 @@ def save_analysis_result(result: str, filename: str = 'competitor_analysis_resul
             if not data[field]:
                 print(f"❌ Empty field: {field}")
                 return
-        with open(filename, 'a', encoding='utf-8') as f:
+        
+        filepath = os.path.join(OUTPUT_DIR, filename)
+        with open(filepath, 'w', encoding='utf-8') as f:  # Changed from 'a' to 'w' to overwrite
             json.dump(data, f, indent=2)
-        print(f"✅ Analysis saved to {filename}")
+        print(f"✅ Analysis saved to {filepath}")
     except json.JSONDecodeError as e:
         print(f"❌ Invalid JSON output from the model: {str(e)}")
     except Exception as e:
         print(f"❌ Error saving analysis: {e}")
 
-async def main2(output_data):
-    startup_data = load_json_files()
+async def main2(output_data, startup_data=None):
+    # Enhanced parameter handling
+    if startup_data is None:
+        # Fallback to loading from file only if not provided
+        startup_data = load_json_files()
+        if not startup_data:
+            print("❌ No startup data provided and failed to load from file")
+            return
+    
     if not startup_data or not output_data:
-        print("❌ Failed to load required JSON files")
+        print("❌ Failed to load required data")
         return
-    messages = prepare_optimized_prompt(startup_data, output_data)
-    result = analyze_with_llm(messages)
-    if result:
-        save_analysis_result(result)
-    else:
-        print("❌ Failed to generate valid JSON analysis")
+    
+    try:
+        messages = prepare_optimized_prompt(startup_data, output_data)
+        result = analyze_with_llm(messages)
+        if result and result != "{}":
+            save_analysis_result(result)
+        else:
+            print("❌ Failed to generate valid JSON analysis")
+    except AttributeError as e:
+        if "'NoneType' object has no attribute 'get'" in str(e):
+            print(f"⚠️ Skipping this company due to AttributeError: {e}")
+            return  # Skip this company and continue
+        else:
+            print(f"❌ Unexpected AttributeError: {e}")
+            return
+    except Exception as e:
+        print(f"⚠️ Skipping this company due to unexpected error: {e}")
+        return

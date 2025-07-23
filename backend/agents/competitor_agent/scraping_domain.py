@@ -150,15 +150,21 @@ def extract_company_details(soup):
 def scrape_with_selenium(url):
     print(f"🌐 Scraping with Selenium: {url}")
     options = Options()
-    options.add_argument("--headless")
+    options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--window-size=1920,1080")
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     driver.implicitly_wait(10)
     try:
+        service = Service()
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(30)
+        driver.implicityly_wait(10)
+
         driver.get(url)
         time.sleep(3)
+
         soup = BeautifulSoup(driver.page_source, "html.parser")
         return extract_company_details(soup)
     finally:
@@ -277,7 +283,9 @@ def scrape_company(company, api_key, cse_id):
         print(f"❌ Error scraping company {company}: {e}")
         return None
 
-def main(primary_prompt, secondary_prompt, third_prompt, fourth_prompt):
+def main(primary_prompt, secondary_prompt, third_prompt, fourth_prompt, startup_data = None):
+    
+
     all_companies = []
     with open("final_output.json", 'w', encoding='utf-8') as f:
         json.dump([], f)

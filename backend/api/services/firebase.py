@@ -54,10 +54,10 @@ class FirebaseService:
             print(f"Error getting analysis result from Firebase: {e}")
             return None
 
-    def save_output(self, session_id: str, output_data: Dict[str, Any]) -> None:
-        """Save output data to Firestore"""
+    def save_output(self, uid: str, session_id: str, output_data: Dict[str, Any]) -> None:
+        """Save output data to Firestore under outputs/{uid}/sessions/{session_id}"""
         try:
-            self.db.collection('outputs').document(session_id).set(output_data)
+            self.db.collection('outputs').document(uid).collection('sessions').document(session_id).set(output_data, merge=True)
         except Exception as e:
             print(f"Error saving output to Firebase: {e}")
 
