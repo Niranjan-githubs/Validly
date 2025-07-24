@@ -39,20 +39,17 @@ query_chain = prompt_template | llm
 def generate_queries(key_strings: dict) -> list:
     context_str = "\n".join([f"{k}: {v}" for k, v in key_strings.items()])
     response = query_chain.invoke({"key_info": context_str})
-    
     # Clean the response
     if isinstance(response, str):
-        # Remove markdown formatting
         clean_response = response.replace("```json", "").replace("```", "").strip()
-        
+        import json
         try:
-            # Try to parse as JSON/list
-            import json
-            return json.loads(clean_response)
+            queries = json.loads(clean_response)
+            # Clean up each query string
+            queries = [q.strip(' \"\',') for q in queries if isinstance(q, str)]
+            return queries
         except json.JSONDecodeError:
             # If not valid JSON, split by lines and clean up
-            return [line.strip() for line in clean_response.splitlines() 
-                   if line.strip() and not line.startswith("[") and not line.startswith("]")]
-    
+            return [line.strip(' \"\',') for line in clean_response.splitlines() if line.strip() and not line.startswith("[") and not line.startswith("]")]
     return []
 

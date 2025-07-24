@@ -15,11 +15,32 @@ from agents.competitor_agent.domain import guess_domain_with_llama3
 chromedriver_path = r"D:\mahaa_v\chromedriver-win64\chromedriver.exe"
 
 TAVILY_API_KEY = "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"
-def tavily_search(query, api_key, num_results=10):
-    client = TavilyClient(api_key)
-    response = client.search(query=query, max_results=num_results)
-    reddit_urls = [item['url'] for item in response.get('results', []) if 'reddit.com/r/' in item['url']]
-    return reddit_urls
+def get_env_keys(prefix):
+    keys = []
+    idx = 1
+    while True:
+        key = os.environ.get(f"{prefix}{idx}")
+        if key:
+            keys.append(key)
+            idx += 1
+        else:
+            break
+    return keys
+
+def tavily_search(query, num_results=10):
+    tavily_keys = get_env_keys("TAVILY_API_KEY")
+    for t_idx, tavily_key in enumerate(tavily_keys):
+        try:
+            client = TavilyClient(api_key=tavily_key)
+            response = client.search(query=query, max_results=num_results)
+            reddit_urls = [item['url'] for item in response.get('results', []) if 'reddit.com/r/' in item['url']]
+            return reddit_urls
+        except Exception as e:
+            if "usage limit" in str(e).lower() or "rate limit" in str(e).lower():
+                print(f"⚠️ Tavily key {t_idx+1} rate limited. Trying next key...")
+                continue
+            print(f"❌ Error during Tavily search: {e}")
+    return []
 
 def extract_comment_data(comment_div, post_url):
     # Find author from the <a> tag inside the author-name-meta div
@@ -111,13 +132,14 @@ def run_user_pain_agent(startup_data: dict) -> list:
     domain_name = get_domain_name_from_startup(startup_data)
     query = f"site.reddit.com list {domain_name} users worst experience"
     num_results = 10
-    urls = tavily_search(query, TAVILY_API_KEY, num_results=num_results)
+    urls = tavily_search(query, num_results=num_results)
     print(f"Found {len(urls)} Reddit URLs.")
     # Use startup_data for keywords if available
     keywords = startup_data11.get('keywords', []) if startup_data11 else []
 
     # Scrape posts in parallel
-    from user_pain_agent.llm_summarizer import select_top_comments_with_llm, save_single_comment_append, load_startup_summary
+    # Change to absolute import
+    from agents.user_pain_agent.llm_summarizer import select_top_comments_with_llm, save_single_comment_append, load_startup_summary
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import time
 

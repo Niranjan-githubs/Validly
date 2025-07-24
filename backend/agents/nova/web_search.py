@@ -26,6 +26,11 @@ def run_web_search_agent(queries: list[str]):
     for query in queries:
         print(f"🔍 Searching: {query}")
         response = search_tool.invoke(query)
-        results[query] = response[:3]  # Top 3 results only (optional trim)
-
+        print(f"DEBUG: response for query '{query}': {type(response)} - {str(response)[:300]}")
+        # Ensure response is a list of dicts with 'url'
+        if isinstance(response, list) and all(isinstance(r, dict) and 'url' in r for r in response):
+            results[query] = response[:3]
+        else:
+            # Fallback: wrap string or unexpected format
+            results[query] = []
     return results

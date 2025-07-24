@@ -9,12 +9,16 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
 import cloudscraper
 import asyncio
-from .integrate_llm import main2
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from .process_data import final
 from tavily import TavilyClient
 from dotenv import load_dotenv, find_dotenv
 import os
+import subprocess
+import contextlib
+from langchain_together import ChatTogether
+from langchain_core.messages import SystemMessage, HumanMessage
+# Change to absolute import
+from agents.competitor_agent.domain import get_domain_and_prompts
 load_dotenv(find_dotenv())
 
 
@@ -22,45 +26,60 @@ GOOGLE_API_KEY = ""
 GOOGLE_CSE_ID = ""
 scraper_api = os.environ.get("SCRAPERAPI_KEY")
 output_data = []
+scraped_sorted = []
+chromedriver_path = r"chromedriver-win64\chromedriver.exe"
 
 # 💥 Step 1: Google Search with ScraperAPI
-def scraperapi_search(query, GOOGLE_API_KEY, GOOGLE_CSE_ID):
-    search_url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={GOOGLE_API_KEY}&cx={GOOGLE_CSE_ID}"
-    proxies = {"http": f"http://scraperapi:{scraper_api}@proxy-server.scraperapi.com:8001"}
-    print(f"🔍 Searching via Google: {query}")
-    try:
-        response = requests.get(search_url, proxies=proxies)
-        response.raise_for_status()
-        results = response.json()
-        if 'items' in results and len(results['items']) > 0:
-            link = results['items'][0]['link']
-            print(f"🔗 Got link: {link}")
-            return link
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 429:
-            print(f"⚠️ Google Search (ScraperAPI) returned 429. Falling back to Tavily API...")
-            try:
-                client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
-                tavily_results = client.search(
-                    query=query,
-                    search_depth="basic",
-                    include_answer=False,
-                    include_images=False,
-                    max_results=1
-                )
-                if 'results' in tavily_results and len(tavily_results['results']) > 0:
-                    link = tavily_results['results'][0]['url']
-                    print(f"🔗 Got link from Tavily: {link}")
-                    return link
-                else:
-                    print("❌ No results found from Tavily API.")
-            except Exception as tavily_e:
-                print(f"❌ Error with Tavily API fallback: {tavily_e}")
+def get_env_keys(prefix):
+    keys = []
+    idx = 1
+    while True:
+        key = os.environ.get(f"{prefix}{idx}")
+        if key:
+            keys.append(key)
+            idx += 1
         else:
+            break
+    return keys
+
+# --- API key rotation for Google and Tavily ---
+def scraperapi_search(query, google_keys, cse_ids, tavily_keys):
+    for g_idx, (GOOGLE_API_KEY, GOOGLE_CSE_ID) in enumerate(zip(google_keys, cse_ids)):
+        search_url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={GOOGLE_API_KEY}&cx={GOOGLE_CSE_ID}"
+        proxies = {"http": f"http://scraperapi:{scraper_api}@proxy-server.scraperapi.com:8001"}
+        print(f"🔍 Searching via Google: {query} (key {g_idx+1})")
+        try:
+            response = requests.get(search_url, proxies=proxies)
+            response.raise_for_status()
+            data = response.json()
+            if "items" in data and len(data["items"]) > 0:
+                return data["items"][0]["link"]
+            else:
+                print("⚠️ No Google results, trying Tavily as backup...")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                print(f"⚠️ Google Search returned 429 for key {g_idx+1}. Trying next key...")
+                continue
+            else:
+                print(f"❌ HTTP error during Google search: {e}")
+                continue
+        except Exception as e:
             print(f"❌ HTTP error during Google search: {e}")
-    except Exception as e:
-        print(f"❌ An unexpected error occurred during Google search: {e}")
-    print("❌ No results found")
+            continue
+    # Tavily fallback with rotation
+    for t_idx, tavily_key in enumerate(tavily_keys):
+        try:
+            tavily_client = TavilyClient(api_key=tavily_key)
+            tavily_results = tavily_client.search(query, max_results=1)
+            if tavily_results and "results" in tavily_results and len(tavily_results["results"]) > 0:
+                return tavily_results["results"][0]["url"]
+            else:
+                print(f"❌ Tavily (key {t_idx+1}) returned no results.")
+        except Exception as e:
+            if "usage limit" in str(e).lower() or "rate limit" in str(e).lower():
+                print(f"⚠️ Tavily key {t_idx+1} rate limited. Trying next key...")
+                continue
+            print(f"❌ Error during Tavily search: {e}")
     return None
 
 # 💥 Step 2: Scrape first URL for company names
@@ -73,7 +92,6 @@ def get_company_names_from_url(url):
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
     except Exception as e:
-        print(f"⚠️ ScraperAPI failed for {url} with error: {e}. Falling back to TavilyClient.extract...")
         try:
             client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
             extract_response = client.extract(urls=[url])
@@ -98,7 +116,7 @@ def get_company_names_from_url(url):
         ]
 
         print(f"✅ Found {len(companies)} companies.\n")
-        return companies[:15]  # 🎯 Top 15 only, 'cause we fancy
+        return companies[:30]  # 🎯 Top 15 only, 'cause we fancy
     return []
 
 # 💥 Step 3: Scraping company pitchbook details (same as before)
@@ -147,28 +165,40 @@ def extract_company_details(soup):
     return details
 
 # fallback to selenium if cloudscraper fails
-def scrape_with_selenium(url):
-    print(f"🌐 Scraping with Selenium: {url}")
+def scrape_with_selenium(url, chromedriver_path=None):
+    print(f"\U0001F310 Scraping with Selenium: {url}")
     options = Options()
-    options.add_argument("--headless=new")
+    options.add_argument("--headless")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--window-size=1920,1080")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    driver.implicitly_wait(10)
+    # Set a user-agent to help avoid bot detection
+    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    # Suppress most ChromeDriver logs
+    options.add_argument("--log-level=3")
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+
     try:
-        service = Service()
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.set_page_load_timeout(30)
-        driver.implicityly_wait(10)
+        if chromedriver_path:
+            service = Service(chromedriver_path, log_path='NUL')
+        else:
+            service = Service(ChromeDriverManager().install(), log_path='NUL')
+        service.creationflags = subprocess.CREATE_NO_WINDOW  # Hide the console window (Windows only)
+        with open(os.devnull, 'w') as fnull, contextlib.redirect_stderr(fnull):
+            driver = webdriver.Chrome(service=service, options=options)
+            try:
+                driver.get(url)
+                time.sleep(3)
+                soup = BeautifulSoup(driver.page_source, "html.parser")
+                return extract_company_details(soup)
+            finally:
+                driver.quit()
+    except OSError as e:
+        return None
+    except Exception as e:
+        print(f"[ERROR] {e}")
+        return None
 
-        driver.get(url)
-        time.sleep(3)
-
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        return extract_company_details(soup)
-    finally:
-        driver.quit()
 
 def scrape_with_cloudscraper(url, max_retries=3, backoff_factor=5):
     print(f"🌐 Scraping with cloudscraper: {url}")
@@ -182,20 +212,18 @@ def scrape_with_cloudscraper(url, max_retries=3, backoff_factor=5):
         except requests.exceptions.HTTPError as e:
             if response.status_code == 429:
                 wait = backoff_factor * (2 ** attempt)
-                print(f"⚠️ 429 Too Many Requests")
+                return scrape_with_selenium(url, chromedriver_path)
             else:
-                print(f"⚠️ Cloudscraper HTTP error: {e}, switching to Selenium...")
-                return scrape_with_selenium(url)
+                return scrape_with_selenium(url, chromedriver_path)
         except Exception as e:
-            print(f"⚠️ Cloudscraper failed with: {e}, switching to Selenium...")
-            return scrape_with_selenium(url)
-    print("⚠️ Max retries reached for cloudscraper, switching to Selenium...")
-    return scrape_with_selenium(url)
+            return scrape_with_selenium(url, chromedriver_path)
+    return scrape_with_selenium(url, chromedriver_path)
 
 def save_json(data, filename='final_output.json'):
-    with open(filename, 'w', encoding='utf-8') as f:
+    filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../outputs', filename)
+    with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
-    print(f"💾 Saved to {filename}")
+    print(f"💾 Saved to {filepath}")
 
 # 💥 Full Flow: Run it all
 def extract_company_names_from_url(url):
@@ -207,17 +235,14 @@ def extract_company_names_from_url(url):
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
     except Exception as e:
-        print(f"⚠️ ScraperAPI failed for {url} with error: {e}. Falling back to TavilyClient.extract...")
         try:
             client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
             extract_response = client.extract(urls=[url])
             if extract_response and 'content' in extract_response:
                 soup = BeautifulSoup(extract_response['content'], 'html.parser')
             else:
-                print(f"❌ TavilyClient.extract returned no content for {url}.")
                 return []
         except Exception as tavily_e:
-            print(f"❌ Error with TavilyClient.extract fallback for {url}: {tavily_e}")
             return []
     
     if soup:
@@ -227,7 +252,6 @@ def extract_company_names_from_url(url):
             if set(tag.get('class', [])) == set(['txn--font-16', 'txn--text-color-mine-shaft'])
         ]
         companies = [tag.text.strip() for tag in company_tags if tag.text.strip() and "team" not in tag.text.lower()]
-        print(f"DEBUG: Initial Companies: {companies}")
 
         # Additional scraping method to cover other domains (existing)
         additional_tags = [
@@ -235,7 +259,7 @@ def extract_company_names_from_url(url):
             if set(tag.get('class', [])) == set(['txn--text-color-mine-shaft'])
         ]
         additional_companies = [tag.text.strip() for tag in additional_tags if tag.text.strip() and "team" not in tag.text.lower()]  # Limit to top 10
-        print(f"DEBUG: Additional Companies: {additional_companies}")
+
 
         # NEW: Also extract from <a class="txn--text-decoration-none txn--text-color-mine-shaft">
         extra_tags = [
@@ -243,14 +267,11 @@ def extract_company_names_from_url(url):
             if set(tag.get('class', [])) == set(['txn--text-decoration-none', 'txn--text-color-mine-shaft'])
         ]
         extra_companies = [tag.text.strip() for tag in extra_tags if tag.text.strip() and "team" not in tag.text.lower()]
-        print(f"DEBUG: Extra Companies: {extra_companies}")
 
         # Combine all lists and deduplicate
         all_companies = companies + additional_companies + extra_companies
-        print(f"DEBUG: All Companies (combined): {all_companies}")
         # Filter only valid company names (excluding social media and email links)
         valid_companies = [company for company in all_companies if not any(platform in company.lower() for platform in ['linkedin', 'twitter', 'facebook', 'email', 'contact', 'team', 'overview','companies','company','about'])]
-        print(f"DEBUG: Valid Companies (after filtering): {valid_companies}")
         # Deduplicate while preserving order
         seen = set()
         deduped_companies = []
@@ -259,16 +280,14 @@ def extract_company_names_from_url(url):
                 deduped_companies.append(company)
                 seen.add(company)
         # Limit to top 20 results
-        deduped_companies = deduped_companies[:20]
-        print(f"DEBUG: Deduped Companies (final): {deduped_companies}")
-        print(f"✅ Found companies:\n{deduped_companies}")
+        deduped_companies = deduped_companies[:30]
         return deduped_companies
     return []
     
-def scrape_company(company, api_key, cse_id):
+def scrape_company(company, google_keys, cse_ids, tavily_keys):
     try:
         pitchbook_query = f"{company} pitchbook"
-        pitchbook_url = scraperapi_search(pitchbook_query, api_key, cse_id)
+        pitchbook_url = scraperapi_search(pitchbook_query, google_keys, cse_ids, tavily_keys)
         if pitchbook_url:
             details = scrape_with_cloudscraper(pitchbook_url)
             return {
@@ -283,123 +302,160 @@ def scrape_company(company, api_key, cse_id):
         print(f"❌ Error scraping company {company}: {e}")
         return None
 
-def main(primary_prompt, secondary_prompt, third_prompt, fourth_prompt, startup_data = None):
+def get_sorted_companies_llm(startup_data, domain_search, major_domain, company_list):
+    """
+    You are an assistant that splits a list of companies into direct and indirect competitors for a startup.
+    """
+    title = startup_data.get('title', '')
+    description = startup_data.get('description', '')
+    main_feature = startup_data.get('main_feature', '')
+    tech_stack = startup_data.get('tech_stack', [])
+    delivery_model = "online" if "online" in description.lower() or "online" in title.lower() else "offline"
+    prompt = f"""
+You are an expert startup analyst. Given the following startup summary and a list of companies, split the companies into two categories:
+- "direct_competitors": Companies that solve the same problem, serve the same users, and use a similar platform, technology, and delivery model as the startup.
+- "indirect_competitors": Companies that are in a related domain or market but do not directly compete with the startup's core offering.
+
+Startup summary:
+{json.dumps(startup_data, ensure_ascii=False)}
+
+Domain: {domain_search}
+Major Domain: {major_domain}
+Tech Stack: {tech_stack}
+Delivery Model: {delivery_model}
+
+Company list:
+{json.dumps(company_list, ensure_ascii=False)}
+
+Instructions:
+- For each company, use your knowledge and any available public information to determine if it is a direct or indirect competitor.
+- Only include companies you can reasonably classify.
+- Return ONLY a JSON object with two arrays: "direct_competitors" and "indirect_competitors". Example:
+{{
+  "direct_competitors": ["Company1", "Company2"],
+  "indirect_competitors": ["Company3", "Company4"]
+}}
+"""
+    lc_messages = [
+        SystemMessage(content="You are a helpful assistant that splits companies into direct and indirect competitors for a startup."),
+        HumanMessage(content=prompt)
+    ]
+    llm = ChatTogether(
+        together_api_key=os.environ.get("TOGETHER_API_KEY2"),
+        model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+    )
+    try:
+        response = llm.invoke(lc_messages)
+        content = response.content.strip()
+        content = content.replace('```json', '').replace('```', '').strip()
+        competitors = json.loads(content)
+        if isinstance(competitors, dict):
+            return competitors
+    except Exception as e:
+        print(f"❌ Error getting sorted companies from LLM: {e}")
+    # fallback: treat all as direct
+    return {"direct_competitors": company_list, "indirect_competitors": []}
+
+# --- NEW: LLM prompt to get top 5 competitors in major_domain ---
+def get_top_competitors_llm(domain_search, major_domain, startup_data):
+    import os
+    import json
+    title = startup_data.get('title', 'Unknown')
+    prompt = f"""
+You are an expert in startup and tech market research for companies in India. List the top 10 companies that are best-known competitors for the startup data: '{json.dumps(startup_data, ensure_ascii=False)}'
+ALL companies you return must be based in India or have significant operations in India. Ignore companies that are not Indian or do not have a major presence in India.
+Be sure to include the top competitors from both the specific domain and the broader major domain.
+Return ONLY a valid JSON array of company names, e.g. [\"Company1\", \"Company2\", ...].
+Do not include any explanations, markdown, or extra text.
+"""
+    from langchain_together import ChatTogether
+    from langchain_core.messages import SystemMessage, HumanMessage
+    lc_messages = [
+        SystemMessage(content="You are a competitor company finder in India. Always respond with a JSON array of company names that are based in India or have significant operations in India. Include the top competitors from both the domain and major domain. No extra text."),
+        HumanMessage(content=prompt)
+    ]
+    llm = ChatTogether(
+        together_api_key=os.environ.get("TOGETHER_API_KEY2"),
+        model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+    )
+    try:
+        response = llm.invoke(lc_messages)
+        content = response.content.strip()
+        content = content.replace('```json', '').replace('```', '').strip()
+        companies = json.loads(content)
+        if isinstance(companies, list):
+            return [c for c in companies if isinstance(c, str)]
+    except Exception as e:
+        print(f"❌ Error getting top competitors: {e}")
+    return []
+
+
+def main(primary_prompt, secondary_prompt, third_prompt, fourth_prompt, domain_name, domain_search, major_domain, startup_data):
+    import os
+    import json
+
+    all_companies = []
+    OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../outputs')
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    # Always create the output files, even if empty
+    final_output_path = os.path.join(OUTPUT_DIR, "final_result.json")
+    competitor_analysis_path = os.path.join(OUTPUT_DIR, "final_result.json")
+
+    # --- Parallelize the four search queries ---
+    search_prompts = [
+        (primary_prompt, 'primary'),
+        (secondary_prompt, 'secondary'),
+        (third_prompt, 'third'),
+        (fourth_prompt, 'fourth')
+    ]
+    def search_and_extract(prompt, api_key, cse_id, label):
+        url = scraperapi_search(prompt, api_key, cse_id)
+        print(f"DEBUG: {label.capitalize()} Search URL: {url}")
+        if url:
+            if label in ['primary', 'fourth']:
+                return get_company_names_from_url(url)
+            else:
+                return extract_company_names_from_url(url)
+        else:
+            print(f"⚠️ Couldn't get {label} result. Moving on...")
+            return []
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_to_label = {
+            executor.submit(search_and_extract, prompt, GOOGLE_API_KEY, GOOGLE_CSE_ID, label): label
+            for prompt, label in search_prompts
+        }
+        for future in as_completed(future_to_label):
+            label = future_to_label[future]
+            try:
+                results[label] = future.result()
+            except Exception as e:
+                print(f"⚠️ Error in {label} search: {e}")
+                results[label] = []
+
+    # Combine all results into all_companies
+    all_companies = results.get('primary', []) + results.get('fourth', []) + results.get('secondary', []) + results.get('third', [])
+
+    # Detect major_domain from startup_data
+    if startup_data:
+        llm_companies = get_top_competitors_llm(domain_search, major_domain, startup_data)
+        print(f"🔎Top 5 competitors for startup '{startup_data.get('title', 'Unknown')}': {llm_companies}")
+        all_companies = llm_companies + all_companies
+
+    # Deduplicate before proceeding
+    all_companies = list(dict.fromkeys(all_companies))
+    print(f"All deduped companies: {all_companies}")
+    # LLM sort
+    if startup_data and all_companies:
+        sorted_companies = get_sorted_companies_llm(startup_data,domain_search, major_domain, all_companies)
+        print(f"Sorted companies from LLM: {sorted_companies}")
+    else:
+        sorted_companies = all_companies
+    # Scrape company details for sorted list
     
-
-    all_companies = []
-    with open("final_output.json", 'w', encoding='utf-8') as f:
-        json.dump([], f)
-    with open("competitor_analysis_result.json", 'w', encoding='utf-8') as f1:
-        json.dump([], f1)
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY4")
-    GOOGLE_CSE_ID = os.environ.get("GOOGLE_CSE_ID7")
-    search_url = scraperapi_search(primary_prompt, GOOGLE_API_KEY, GOOGLE_CSE_ID)
-    print(f"DEBUG: Primary Search URL: {search_url}")
-    if not search_url:
-        print("🛑 Ending - couldn't get primary search result")
-        return
-    all_companies += get_company_names_from_url(search_url)
-    fourth_url = scraperapi_search(fourth_prompt, GOOGLE_API_KEY, GOOGLE_CSE_ID)
-    print(f"DEBUG: Fourth Search URL: {fourth_url}")
-    if not fourth_url:
-        print("🛑 Ending - couldn't get primary search result")
-        return
-    all_companies += get_company_names_from_url(fourth_url)
-    secondary_url = scraperapi_search(secondary_prompt, GOOGLE_API_KEY, GOOGLE_CSE_ID)
-    print(f"DEBUG: Secondary Search URL: {secondary_url}")
-    if secondary_url:
-        all_companies += extract_company_names_from_url(secondary_url)
-    else:
-        print("⚠️ Couldn't get secondary result. Moving on...")
-    third_url = scraperapi_search(third_prompt, GOOGLE_API_KEY, GOOGLE_CSE_ID)
-    print(f"DEBUG: Third Search URL: {third_url}")
-    if third_url:
-        all_companies += extract_company_names_from_url(third_url)
-    else:
-        print("⚠️ Couldn't get third result. Moving on...")
-    print(all_companies)
-    # exit()
-    all_companies = list(dict.fromkeys(all_companies))
-    all_companies = all_companies[:30]
-    print(all_companies)  # Limit to 20 for speed
-    output_data = []
-    # Define API keys and CSE IDs
-    api_keys = [
-        os.environ.get("GOOGLE_API_KEY1"),
-        os.environ.get("GOOGLE_API_KEY2"),
-        os.environ.get("GOOGLE_API_KEY3")
-    ]
-    cse_ids = [
-        os.environ.get("GOOGLE_CSE_ID1"),
-        os.environ.get("GOOGLE_CSE_ID2"),
-        os.environ.get("GOOGLE_CSE_ID3"),
-        os.environ.get("GOOGLE_CSE_ID4"),
-        os.environ.get("GOOGLE_CSE_ID5"),
-        os.environ.get("GOOGLE_CSE_ID6")
-    ]
-    api_cse_pairs = [
-        (api_keys[0], cse_ids[0]),  # api1 + cse1
-        (api_keys[0], cse_ids[1]),  # api1 + cse2
-        (api_keys[1], cse_ids[2]),  # api2 + cse1
-        (api_keys[1], cse_ids[3]),  # api2 + cse2
-        (api_keys[2], cse_ids[4]),  # api3 + cse1
-        (api_keys[2], cse_ids[5])   # api3 + cse2
-    ]
-    # Parallel scrape company details
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = []
-        for idx, company in enumerate(all_companies):
-            api_key, cse_id = api_cse_pairs[idx % 6]
-            futures.append(executor.submit(scrape_company, company, api_key, cse_id))
-        for future in as_completed(futures):
-            result = future.result()
-            if result:
-                output_data.append(result)
-    # Per-company LLM call (sequential, for token safety)
-    for i, company_data in enumerate(output_data):
-        print(f"🤖 Sending company {i+1}/{len(output_data)} to LLM...")
-        asyncio.run(main2([company_data]))
-    save_json(output_data)
-    print("DEBUG: Calling final() from scraping_domain.py")
-    final()
-    print(f"✅ All companies processed and saved.")
-
-
-def main_in_memory(primary_prompt, secondary_prompt, third_prompt, fourth_prompt):
-    """
-    In-memory version of main(): returns competitor results as a list, no file I/O.
-    """
-    all_companies = []
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY4")
-    GOOGLE_CSE_ID = os.environ.get("GOOGLE_CSE_ID7")
-    search_url = scraperapi_search(primary_prompt, GOOGLE_API_KEY, GOOGLE_CSE_ID)
-    print(f"DEBUG: Primary Search URL: {search_url}")
-    if not search_url:
-        print("🛑 Ending - couldn't get primary search result")
-        return {"message": "Could not get primary search result"}
-    all_companies += get_company_names_from_url(search_url)
-    fourth_url = scraperapi_search(fourth_prompt, GOOGLE_API_KEY, GOOGLE_CSE_ID)
-    print(f"DEBUG: Fourth Search URL: {fourth_url}")
-    if not fourth_url:
-        print("🛑 Ending - couldn't get fourth search result")
-        return {"message": "Could not get fourth search result"}
-    all_companies += get_company_names_from_url(fourth_url)
-    secondary_url = scraperapi_search(secondary_prompt, GOOGLE_API_KEY, GOOGLE_CSE_ID)
-    print(f"DEBUG: Secondary Search URL: {secondary_url}")
-    if secondary_url:
-        all_companies += extract_company_names_from_url(secondary_url)
-    else:
-        print("⚠️ Couldn't get secondary result. Moving on...")
-    third_url = scraperapi_search(third_prompt, GOOGLE_API_KEY, GOOGLE_CSE_ID)
-    print(f"DEBUG: Third Search URL: {third_url}")
-    if third_url:
-        all_companies += extract_company_names_from_url(third_url)
-    else:
-        print("⚠️ Couldn't get third result. Moving on...")
-    all_companies = list(dict.fromkeys(all_companies))
-    all_companies = all_companies[:30]
-    print(all_companies)  # Limit to 20 for speed
-    output_data = []
     api_keys = [
         os.environ.get("GOOGLE_API_KEY1"),
         os.environ.get("GOOGLE_API_KEY2"),
@@ -421,34 +477,99 @@ def main_in_memory(primary_prompt, secondary_prompt, third_prompt, fourth_prompt
         (api_keys[2], cse_ids[4]),
         (api_keys[2], cse_ids[5])
     ]
-    from competitor_agent.integrate_llm import main2
-    from competitor_agent.process_data import final
-    # Parallel scrape company details
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = []
-        for idx, company in enumerate(all_companies):
-            api_key, cse_id = api_cse_pairs[idx % 6]
-            futures.append(executor.submit(scrape_company, company, api_key, cse_id))
-        for future in as_completed(futures):
+    # Scrape company details for sorted list in parallel
+    scraped_sorted = []
+
+    # Extract direct_companies from sorted_companies if available
+    if isinstance(sorted_companies, dict) and "direct_competitors" in sorted_companies:
+        direct_companies = sorted_companies["direct_competitors"]
+        indirect_companies = sorted_companies.get("indirect_competitors", [])
+        company_order = direct_companies + indirect_companies
+    else:
+        company_order = sorted_companies
+        direct_companies = sorted_companies if isinstance(sorted_companies, list) else []
+
+    with ThreadPoolExecutor(max_workers=8) as executor:  # Adjust max_workers as needed
+        future_to_company = {
+            executor.submit(scrape_company, company, api_keys[idx % 3], cse_ids[idx % 6]): company
+            for idx, company in enumerate(company_order)
+        }
+        for future in as_completed(future_to_company):
             result = future.result()
-            if result:
-                output_data.append(result)
-    # Per-company LLM call (sequential, for token safety)
-    for i, company_data in enumerate(output_data):
-        print(f"🤖 Sending company {i+1}/{len(output_data)} to LLM...")
-        # main2 expects a list, but we want to keep everything in memory
-        # main2 will append to competitor_analysis_result.json, but we want to avoid file I/O
-        # Instead, call the LLM logic directly and collect results in a list
-        # For now, just skip main2 and return output_data as is
-        # TODO: Refactor main2 to support in-memory operation if needed
-        pass
-    # Optionally, you can process output_data further here
-    # Return the competitor results as a list
-    return output_data
+            if result and is_valid_company(result):
+                scraped_sorted.append(result)
+
+    # Sort so direct competitors come first, preserving LLM order
+    scraped_sorted.sort(
+        key=lambda c: (
+            c["company_name"] not in direct_companies,
+            direct_companies.index(c["company_name"]) if c["company_name"] in direct_companies else 9999
+        )
+    )
+
+    # Save to JSON
+    sorted_outfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../outputs', 'final_result.json')
+    with open(sorted_outfile, 'w', encoding='utf-8') as f:
+        json.dump(scraped_sorted, f, indent=2, ensure_ascii=False)
+    # Always create the file, even if empty
+    if not scraped_sorted:
+        with open(sorted_outfile, 'w', encoding='utf-8') as f:
+            json.dump([], f, indent=2, ensure_ascii=False)
+        print(f"⚠️ No valid companies found. Created empty {sorted_outfile}")
+    print("✅ All companies processed and saved.")
 
 
-    
+def main_in_memory(primary_prompt, secondary_prompt, third_prompt, fourth_prompt,
+                  domain_name, domain_search, major_domain, startup_data):
+    """In-memory version of main() that doesn't use files, now with API key rotation"""
+    competitors = []
+    try:
+        google_keys = get_env_keys("GOOGLE_API_KEY")
+        cse_ids = get_env_keys("GOOGLE_CSE_ID")
+        tavily_keys = get_env_keys("TAVILY_API_KEY")
+        urls = []
+        for prompt in [primary_prompt, secondary_prompt, third_prompt, fourth_prompt]:
+            url = scraperapi_search(prompt, google_keys, cse_ids, tavily_keys)
+            if url:
+                urls.append(url)
+        # Scrape companies from URLs
+        all_companies = []
+        for url in urls:
+            companies = get_company_names_from_url(url)
+            all_companies.extend(companies)
+        # Remove duplicates
+        all_companies = list(set(all_companies))
+        # Get detailed info for each company
+        for company in all_companies:
+            details = scrape_company(company, google_keys, cse_ids, tavily_keys)
+            if details:
+                competitors.append(details)
+        return {
+            "competitors": competitors,
+            "total": len(competitors),
+            "domain": domain_search,
+            "major_domain": major_domain
+        }
+    except Exception as e:
+        print(f"❌ Error in competitor scraping: {e}")
+        return {
+            "competitors": [],
+            "total": 0,
+            "error": str(e)
+        }
+
+def is_valid_company(company):
+    details = company.get("details", {})
+    if not details:
+        return False
+    if (
+        not details.get("Industries") and
+        not details.get("Verticals") and
+        not details.get("Social Media")
+    ):
+        return False
+    return True
+
 
 
 
