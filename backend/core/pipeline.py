@@ -509,6 +509,26 @@ class OptimizedFoundrScanPipeline:
                 uid,
                 session_id
             )
+
+            # Step 6: Run risk analysis and add to report
+            print("\n6️⃣ Running Risk Analysis...")
+            try:
+                from agents.risk_agent.risk_agent import CloudRiskAgent
+                risk_agent = CloudRiskAgent()
+                risk_analysis = asyncio.run(
+                    risk_agent.analyze_startup_risks(
+                        startup_data,
+                        competitor_data,
+                        market_data
+                    )
+                )
+                final_report["risk_mitigation"] = risk_analysis.get("risk_matrix", [])
+                print(f"✅ Risk analysis complete - {len(final_report['risk_mitigation'])} risks added to report")
+                # Save updated report to Firestore
+                if uid and session_id:
+                    self.save_to_firestore(uid, session_id, "complete_analysis", final_report)
+            except Exception as e:
+                print(f"❌ Error running risk analysis: {e}")
             
             print("\n✨ Analysis Complete! Results saved to Firestore session.")
             print(f"📊 Summary: {competitor_data.get('competitor_count', 0)} competitors, "
