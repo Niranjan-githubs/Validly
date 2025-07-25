@@ -1,7 +1,7 @@
 
 .customScrollbar {
   scrollbar-width: 6px;
-  scrollbar-color: rgba(30, 41, 59, 0.7) rgba(0, 0, 0, 1);
+  scrollbar-color: rgb(0, 0, 0) rgba(0, 0, 0, 1);
 }
 
 .customScrollbar::-webkit-scrollbar {
@@ -9,26 +9,26 @@
 }
 
 .customScrollbar::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgb(0, 0, 0);
   border-radius: 3px;
 }
 
 
 .customScrollbar::-webkit-scrollbar-thumb {
-  background: rgba(30, 41, 59, 0.7);
+  background: rgb(0, 0, 0);
   border-radius: 3px;
 }
 
 
 .customScrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(30, 41, 59, 1);
+  background: rgb(0, 0, 0);
 }
 
 
 .bgGridPattern {
   background-image: 
-    linear-gradient(rgba(30, 41, 59, 0.2) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(30, 41, 59, 0.2) 1px, transparent 1px);
+    linear-gradient(rgb(0, 0, 0) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(0, 0, 0) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 

@@ -115,15 +115,25 @@ import React, { useState, useRef, useEffect } from 'react';
     };
 
     return (
-      <div className="flex flex-col h-screen bg-black pt-16">
-        {/* Background elements */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-0 left-0 right-0 h-64 bg-black"></div>
-          <div className="absolute inset-0 bg-black opacity-100"></div>
-        </div>
+      <div className="flex flex-col h-screen pt-16 relative">
+        {/* Spline Animation Background */}
+        <iframe
+          src="https://prod.spline.design/uvpIzpyAVFuW7VLx/scene.splinecode?embed=true"
+          title="Spline Animation"
+          frameBorder="0"
+          width="80%"
+          height="100%"
+          className="absolute inset-0 w-full h-full z-0"
+          style={{ pointerEvents: 'none', background: 'transparent' }}
+          allowFullScreen
+        />
         
-        <div className="flex-1 overflow-hidden flex flex-col relative">
-          <div className="px-4 py-3 border-b border-gray-800 bg-black backdrop-blur-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 z-50 relative">
+        <div className="flex-1 flex flex-col items-end justify-end relative z-10">
+          <div
+            className="w-full max-w-[180px] h-[70vh] mb-4 bg-black rounded-2xl shadow-2xl flex flex-col border border-gray-800"
+            style={{ position: 'fixed', right: '32px', bottom: '32px', zIndex: 20 }}
+          >
+          <div className="px-4 py-3 border-b border-gray-800 bg-black flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 z-50 relative">
             <div className="flex items-center">
               <FloatingOrb size="sm" />
               <h1 className="text-xl font-semibold text-white ml-2">🧠 Idea Agent – Let's Understand Your Startup</h1>
@@ -223,13 +233,14 @@ import React, { useState, useRef, useEffect } from 'react';
               </div>
             )}
           </div>
+          </div>
         </div>
         
         <style>{`
           .bg-grid-pattern {
             background-image: 
-              linear-gradient(rgba(30, 41, 59, 0.3) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(30, 41, 59, 0.3) 1px, transparent 1px);
+              linear-gradient(rgba(0, 0, 0, 1) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(0, 0, 0, 1) 1px, transparent 1px);
             background-size: 40px 40px;
           }
           

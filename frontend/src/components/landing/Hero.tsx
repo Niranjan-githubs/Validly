@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Brain, ChevronRight } from 'lucide-react';
 import GradientText from '../common/GradientText';
 import Button from '../common/Button';
+import SplineFooterCover from './SplineFooterCover';
 
 const Hero: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -48,6 +49,8 @@ const Hero: React.FC = () => {
           </Button>
         </div>
       </div>
+      {/* Curved black box to hide Spline watermark/footer */}
+      <SplineFooterCover />
     </div>
   );
 };

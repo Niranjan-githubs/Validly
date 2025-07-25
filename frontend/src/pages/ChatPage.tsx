@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Spline from '@splinetool/react-spline';
 import { useAuth } from '../contexts/AuthContext';
 import { storeUserOutput, getUserOutput } from '../utils/firestore';
 import Navbar from '../components/common/Navbar';
@@ -30,6 +31,7 @@ const ChatPage: React.FC = () => {
    const videoRef = useRef<HTMLVideoElement>(null);
    const messagesEndRef = useRef<HTMLDivElement>(null);
    const audioRef = useRef<HTMLAudioElement>(null);
+   // Removed animation loading state
    // Auto-scroll to bottom when new messages arrive
    const scrollToBottom = () => {
      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -202,79 +204,49 @@ const ChatPage: React.FC = () => {
    };
  
    return (
-     <div className="min-h-screen bg-transparent relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden bg-black">
+      {/* Spline Animation Background */}
+      <div className="absolute inset-0 w-full h-full z-0" style={{ transform: 'translateX(-86px)' }}>
+        <Spline scene="https://prod.spline.design/uvpIzpyAVFuW7VLx/scene.splinecode" />
+      </div>
  
        <Navbar />
        <audio ref={audioRef} className="hidden" />
        
        <div className="max-w-7xl mx-auto pt-20 px-4 relative">
-         <div className="flex gap-6">
-           {/* Video Avatar Section */}
-           <div className="hidden lg:block w-72 flex-shrink-0">
-             <div className="sticky top-24 bg-gray-800/30 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden border border-purple-500/20 transform transition-all duration-300 hover:scale-[1.02] hover:shadow-purple-500/20">
-               <div className="relative aspect-[9/16] w-full">
-                 <video
-                   ref={videoRef}
-                   className="w-full h-full object-cover"
-                   loop
-                   muted
-                   playsInline
-                   src="/video avatar.mp4"
-                 />
-                 <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/50 to-transparent" />
-                 {isSpeaking && (
-                   <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex space-x-1">
-                     {[...Array(3)].map((_, i) => (
-                       <div
-                         key={i}
-                         className={`w-1.5 h-4 bg-purple-500 rounded-full animate-sound-wave`}
-                         style={{
-                           animationDelay: `${i * 0.1}s`,
-                           animationDuration: '0.5s'
-                         }}
-                       />
-                     ))}
-                   </div>
-                 )}
-                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-gray-900/80" />
-               </div>
-               <div className="p-4 text-center relative">
-                 <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 to-transparent" />
-                 <div className="relative">
-                   <h3 className="text-lg font-medium text-white mb-1 bg-clip-text text-transparent bg-gradient-to-r from-purple-300 to-pink-300">AI Assistant</h3>
-                 </div>
-               </div>
-             </div>
-           </div>
- 
-           {/* Chat Section */}
-           <div className="flex-1">
-             <div className="bg-gray-800/40 backdrop-blur-xl rounded-xl shadow-2xl p-4 mb-4 border border-purple-500/20 transform transition-all duration-300">
-               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div className="flex gap-6">
+          {/* Chat Section Only */}
+          <div className="flex-1 flex flex-col items-end justify-end relative z-10" style={{ pointerEvents: 'none' }}>
+            <div
+              className="w-full max-w-[170vh] h-[86vh] mb-2 bg-black backdrop-blur-xl rounded-2xl shadow-2xl flex flex-col border border-gray-700/40 p-4 fixed right-[18px] bottom-[9px] z-20 pointer-events-none"
+              style={{ pointerEvents: 'none' }}
+            >
+               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4" style={{ pointerEvents: 'none' }}>
                  <div className="flex items-center gap-3">
-                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center shadow-lg shadow-purple-500/20 transform transition-transform hover:scale-105">
-                     <span className="text-lg">🤖</span>
-                   </div>
+                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-black to-gray-800 flex items-center justify-center shadow-lg shadow-black/20 transform transition-transform hover:scale-105">
+                      <span className="text-lg">🤖</span>
+                    </div>
                    <div>
-                     <div className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">Validator</div>
-                     <div className="text-xs text-gray-400">Let's discuss your idea</div>
+                     <div className="text-lg font-medium text-white">Validator</div>
+                    <div className="text-xs text-white">Let's discuss your idea</div>
                    </div>
                  </div>
-                 <button
-                   className="bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 text-white font-medium px-4 py-2 rounded-lg shadow-lg shadow-purple-500/20 transition-all duration-300 hover:shadow-purple-500/40 hover:scale-105 border border-purple-500/30 text-sm"
-                   onClick={() => {
-                     setMessages([welcomeMessage]);
-                     setSessionId(null);
-                     localStorage.removeItem('chatSessionId');
-                   }}
-                   title="Start a new chat session"
-                 >
-                   New Chat
-                 </button>
+                <button
+                  className="bg-transparent text-white font-medium px-4 py-2 rounded-lg shadow-lg transition-all duration-300 border border-gray-700/40 text-sm hover:scale-105 hover:shadow-gray-500/40"
+                  onClick={() => {
+                    setMessages([welcomeMessage]);
+                    setSessionId(null);
+                    localStorage.removeItem('chatSessionId');
+                  }}
+                  title="Start a new chat session"
+                  style={{ pointerEvents: 'auto' }}
+                >
+                  New Chat
+                </button>
                </div>
- 
+
                {/* Messages Container */}
-               <div className={`space-y-3 h-[60vh] overflow-y-auto mb-4 ${styles.customScrollbar} pr-2`}>
+               <div className={`space-y-3 h-[60vh] overflow-y-auto mb-4 ${styles.customScrollbar} pr-2 bg-black rounded-xl p-2`} style={{ pointerEvents: 'none' }}>
                  {messages.map((message, index) => (
                    <div
                      key={index}
@@ -283,21 +255,22 @@ const ChatPage: React.FC = () => {
                      } ${styles.animateFadeIn}`}
                    >
                      {message.sender === 'ai' && (
-                       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center mr-2 flex-shrink-0 shadow-lg shadow-purple-500/20">
+                       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-900 to-gray-700 flex items-center justify-center mr-2 flex-shrink-0 shadow-lg shadow-gray-900/20">
                          <span className="text-sm">🤖</span>
                        </div>
                      )}
                      <div
-                       className={`max-w-[80%] rounded-xl p-3 text-sm ${
-                         message.sender === 'user'
-                           ? 'bg-gradient-to-r from-purple-600 to-purple-800 text-white shadow-lg shadow-purple-500/20'
-                           : 'bg-gray-700/80 text-gray-200 shadow-lg shadow-gray-900/20 backdrop-blur-sm'
-                       } transform transition-all duration-300 hover:scale-[1.02]`}
+                     className={`max-w-[80%] rounded-xl p-3 text-sm ${
+                       message.sender === 'user'
+                         ? 'bg-black text-white shadow-lg shadow-gray-900/20'
+                         : 'bg-gray-800 text-gray-200 shadow-lg shadow-gray-900/20 backdrop-blur-sm'
+                     } transform transition-all duration-300 hover:scale-[1.02]`}
+                     style={{ pointerEvents: 'none' }}
                      >
                        {message.content}
                      </div>
                      {message.sender === 'user' && (
-                       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center ml-2 flex-shrink-0 shadow-lg shadow-purple-500/20">
+                       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-900 to-gray-700 flex items-center justify-center ml-2 flex-shrink-0 shadow-lg shadow-gray-900/20">
                          <span className="text-sm">👤</span>
                        </div>
                      )}
@@ -305,21 +278,21 @@ const ChatPage: React.FC = () => {
                  ))}
                  <div ref={messagesEndRef} />
                </div>
- 
+
                {/* Input Form */}
-               <form onSubmit={handleSubmit} className="flex gap-2">
+               <form onSubmit={handleSubmit} className="flex gap-2" style={{ pointerEvents: 'auto' }}>
                  <Input
                    type="text"
                    value={input}
                    onChange={(e) => setInput(e.target.value)}
                    placeholder="Type your message..."
-                   className="flex-1 bg-gray-700/50 border-purple-500/20 focus:border-purple-500/40 text-white placeholder-gray-400 rounded-lg px-3 py-2 text-sm shadow-lg shadow-purple-500/10 transition-all duration-300 focus:shadow-purple-500/20"
+                   className="flex-1 bg-black border-gray-700/40 focus:border-gray-500/40 text-white placeholder-gray-400 rounded-lg px-3 py-2 text-sm shadow-lg shadow-gray-900/10 transition-all duration-300 focus:shadow-gray-500/20"
                  />
                  <Button
                    type="submit"
                    variant="primary"
                    disabled={loading || !input.trim()}
-                   className="bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 text-white px-4 py-2 rounded-lg shadow-lg shadow-purple-500/20 transition-all duration-300 hover:shadow-purple-500/40 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none text-sm"
+                   className="bg-transparent text-white px-4 py-2 rounded-lg shadow-lg transition-all duration-300 border border-gray-700/40 hover:scale-105 hover:shadow-gray-500/40 disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none text-sm"
                  >
                    {loading ? (
                      <div className="flex items-center gap-1.5">

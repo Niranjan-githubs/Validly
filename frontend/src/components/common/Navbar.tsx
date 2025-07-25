@@ -82,7 +82,7 @@ const Navbar: React.FC<NavbarProps> = ({ transparent = false }) => {
         },
       ],
     },
-    { name: 'Pricing', path: '/pricing' },
+
     {
       name: 'Testimonials',
       path: '/#testimonials',
@@ -110,18 +110,6 @@ const Navbar: React.FC<NavbarProps> = ({ transparent = false }) => {
   ];
 
   const userDropdown = [
-    {
-      title: 'Profile',
-      description: 'View and edit your profile',
-      icon: <User className="w-5 h-5 text-blue-400" />,
-      href: '/profile',
-    },
-    {
-      title: 'Settings',
-      description: 'Configure your account settings',
-      icon: <Settings className="w-5 h-5 text-purple-400" />,
-      href: '/settings',
-    },
     {
       title: 'Help & Support',
       description: 'Get help and support',
@@ -254,30 +242,30 @@ const Navbar: React.FC<NavbarProps> = ({ transparent = false }) => {
               Log in
             </Link>
             <Link
-            to="/signup"
-         className="text-white bg-transparent border border-white/20 px-4 py-2 rounded-full text-sm font-medium transition-all hover:bg-white/10 hover:shadow-lg hover:scale-105 flex items-center"
-      >
-  Start Validating
-  <ChevronRight className="ml-1 h-4 w-4" />
-</Link>
+              to="/signup"
+              className="text-white bg-transparent px-4 py-2 rounded-full text-sm font-medium transition-all hover:shadow-lg hover:scale-105 flex items-center"
+            >
+              Start Validating
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Link>
           </div>
         ) : (
           <div className="flex items-center gap-4">
             <Link
-              to="/chat"
+              to="/dashboard"
               className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                location.pathname === '/chat' ? 'text-white' : 'text-gray-300 hover:text-white'
+                location.pathname === '/dashboard' ? 'text-white' : 'text-gray-300 hover:text-white'
               }`}
             >
-              Chat
+              Dashboard
             </Link>
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => toggleDropdown('user')}
                 className="flex items-center space-x-2 focus:outline-none"
               >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-medium">
-                  {user?.email?.[0]?.toUpperCase() || 'U'}
+                <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center border border-gray-700">
+                  <User className="w-5 h-5 text-white" />
                 </div>
                 <ChevronDown
                   className={`h-4 w-4 text-gray-400 transition-transform ${
@@ -285,7 +273,6 @@ const Navbar: React.FC<NavbarProps> = ({ transparent = false }) => {
                   }`}
                 />
               </button>
-              
               {/* User Dropdown */}
               {activeDropdown === 'user' && (
                 <div className="absolute right-0 mt-2 w-64 rounded-xl bg-[#1a1f2e] border border-[#2d3748] shadow-xl z-50 overflow-hidden">
@@ -406,7 +393,7 @@ const Navbar: React.FC<NavbarProps> = ({ transparent = false }) => {
               </Link>
               <Link
                 to="/signup"
-                className="block text-center text-white bg-gradient-to-r from-blue-500 to-purple-500 px-4 py-2 rounded-full text-base font-medium transition-all hover:shadow-lg hover:shadow-blue-500/20 hover:scale-105"
+                className="block text-center text-white bg-transparent border border-white/20 px-4 py-2 rounded-full text-base font-medium transition-all hover:bg-white/10 hover:shadow-lg hover:scale-105"
                 onClick={() => setIsOpen(false)}
               >
                 Start Validating
@@ -415,13 +402,13 @@ const Navbar: React.FC<NavbarProps> = ({ transparent = false }) => {
           ) : (
             <div className="w-full px-4 mt-2 space-y-3">
               <Link
-                to="/chat"
+                to="/dashboard"
                 className={`block text-center px-3 py-2 rounded-md text-base font-medium transition-colors ${
-                  location.pathname === '/chat' ? 'text-white' : 'text-gray-300 hover:text-white'
+                  location.pathname === '/dashboard' ? 'text-white' : 'text-gray-300 hover:text-white'
                 }`}
                 onClick={() => setIsOpen(false)}
               >
-                Chat
+                Dashboard
               </Link>
               <div className="border-t border-gray-800 my-2"></div>
               {userDropdown.map((item) => (

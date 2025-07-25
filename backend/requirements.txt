@@ -140,3 +140,8 @@ zstandard==0.23.0
 
 # macOS-specific packages (uncomment if on macOS)
 # PyAudio==0.2.14  # May require additional system dependencies
+
+
+
+#firebase 
+firebase-admin

@@ -47,7 +47,7 @@ const Dashboard: React.FC = () => {
               <div className="flex items-center gap-4 mb-7">
                 
                 <h1 className="text-2xl sm:text-5xl font-bold bg-gradient-to-r from-white via-blue-100 to-purple-100 bg-clip-text text-transparent leading-[1.15]">
-                 Validly Dashboard
+                 Validly 
                 </h1>
               </div>
               <p className="text-[#CCCCCC] text-base sm:text-xl font-light tracking-wide">Comprehensive startup analysis powered by advanced AI intelligence</p>
