@@ -20,6 +20,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 # Change to absolute import
 from agents.competitor_agent.domain import get_domain_and_prompts
 load_dotenv(find_dotenv())
+import queue
 
 
 GOOGLE_API_KEY = ""
@@ -44,28 +45,21 @@ def get_env_keys(prefix):
 
 # --- API key rotation for Google and Tavily ---
 def scraperapi_search(query, google_keys, cse_ids, tavily_keys):
-    for g_idx, (GOOGLE_API_KEY, GOOGLE_CSE_ID) in enumerate(zip(google_keys, cse_ids)):
-        search_url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={GOOGLE_API_KEY}&cx={GOOGLE_CSE_ID}"
-        proxies = {"http": f"http://scraperapi:{scraper_api}@proxy-server.scraperapi.com:8001"}
-        print(f"🔍 Searching via Google: {query} (key {g_idx+1})")
-        try:
-            response = requests.get(search_url, proxies=proxies)
-            response.raise_for_status()
-            data = response.json()
-            if "items" in data and len(data["items"]) > 0:
-                return data["items"][0]["link"]
-            else:
-                print("⚠️ No Google results, trying Tavily as backup...")
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:
-                print(f"⚠️ Google Search returned 429 for key {g_idx+1}. Trying next key...")
-                continue
-            else:
-                print(f"❌ HTTP error during Google search: {e}")
-                continue
-        except Exception as e:
-            print(f"❌ HTTP error during Google search: {e}")
-            continue
+    GOOGLE_API_KEY = google_keys[0]
+    GOOGLE_CSE_ID = cse_ids[0]
+    search_url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={GOOGLE_API_KEY}&cx={GOOGLE_CSE_ID}"
+    proxies = {"http": f"http://scraperapi:{scraper_api}@proxy-server.scraperapi.com:8001"}
+    print(f"🔍 Searching via Google: {query}")
+    try:
+        response = requests.get(search_url, proxies=proxies)
+        response.raise_for_status()
+        data = response.json()
+        if "items" in data and len(data["items"]) > 0:
+            return data["items"][0]["link"]
+        else:
+            print("⚠️ No Google results, trying Tavily as backup...")
+    except Exception as e:
+        print(f"❌ Error during Google search: {e}\nTrying Tavily as backup...")
     # Tavily fallback with rotation
     for t_idx, tavily_key in enumerate(tavily_keys):
         try:
@@ -284,10 +278,10 @@ def extract_company_names_from_url(url):
         return deduped_companies
     return []
     
-def scrape_company(company, google_keys, cse_ids, tavily_keys):
+def scrape_company(company, google_api_key, cse_id, tavily_keys):
     try:
         pitchbook_query = f"{company} pitchbook"
-        pitchbook_url = scraperapi_search(pitchbook_query, google_keys, cse_ids, tavily_keys)
+        pitchbook_url = scraperapi_search(pitchbook_query, [google_api_key], [cse_id], tavily_keys)
         if pitchbook_url:
             details = scrape_with_cloudscraper(pitchbook_url)
             return {
@@ -330,6 +324,7 @@ Company list:
 Instructions:
 - For each company, use your knowledge and any available public information to determine if it is a direct or indirect competitor.
 - Only include companies you can reasonably classify.
+- In indirect competitors, make sure to give the list in the sorted order based on the similarity to the startup and also quite popular in the market.
 - Return ONLY a JSON object with two arrays: "direct_competitors" and "indirect_competitors". Example:
 {{
   "direct_competitors": ["Company1", "Company2"],
@@ -390,6 +385,19 @@ Do not include any explanations, markdown, or extra text.
     return []
 
 
+def is_valid_company(company):
+    details = company.get("details", {})
+    if not details:
+        return False
+    if (
+        not details.get("Industries") and
+        not details.get("Verticals") and
+        not details.get("Social Media")
+    ):
+        return False
+    return True
+
+
 def main(primary_prompt, secondary_prompt, third_prompt, fourth_prompt, domain_name, domain_search, major_domain, startup_data):
     import os
     import json
@@ -398,6 +406,9 @@ def main(primary_prompt, secondary_prompt, third_prompt, fourth_prompt, domain_n
     OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../outputs')
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
+
+    # Add this line:
+    tavily_keys = get_env_keys("TAVILY_API_KEY")
 
     # Always create the output files, even if empty
     final_output_path = os.path.join(OUTPUT_DIR, "final_result.json")
@@ -411,7 +422,7 @@ def main(primary_prompt, secondary_prompt, third_prompt, fourth_prompt, domain_n
         (fourth_prompt, 'fourth')
     ]
     def search_and_extract(prompt, api_key, cse_id, label):
-        url = scraperapi_search(prompt, api_key, cse_id)
+        url = scraperapi_search(prompt, api_key, cse_id, tavily_keys)
         print(f"DEBUG: {label.capitalize()} Search URL: {url}")
         if url:
             if label in ['primary', 'fourth']:
@@ -447,11 +458,9 @@ def main(primary_prompt, secondary_prompt, third_prompt, fourth_prompt, domain_n
 
     # Deduplicate before proceeding
     all_companies = list(dict.fromkeys(all_companies))
-    print(f"All deduped companies: {all_companies}")
     # LLM sort
     if startup_data and all_companies:
         sorted_companies = get_sorted_companies_llm(startup_data,domain_search, major_domain, all_companies)
-        print(f"Sorted companies from LLM: {sorted_companies}")
     else:
         sorted_companies = all_companies
     # Scrape company details for sorted list
@@ -484,15 +493,27 @@ def main(primary_prompt, secondary_prompt, third_prompt, fourth_prompt, domain_n
     if isinstance(sorted_companies, dict) and "direct_competitors" in sorted_companies:
         direct_companies = sorted_companies["direct_competitors"]
         indirect_companies = sorted_companies.get("indirect_competitors", [])
+        if indirect_companies:
+            indirect_companies = indirect_companies[:10]
         company_order = direct_companies + indirect_companies
+        print(f"Company order: {company_order}")
     else:
         company_order = sorted_companies
         direct_companies = sorted_companies if isinstance(sorted_companies, list) else []
 
-    with ThreadPoolExecutor(max_workers=8) as executor:  # Adjust max_workers as needed
+    api_cse_queue = queue.Queue()
+    for pair in api_cse_pairs:
+        api_cse_queue.put(pair)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
         future_to_company = {
-            executor.submit(scrape_company, company, api_keys[idx % 3], cse_ids[idx % 6]): company
-            for idx, company in enumerate(company_order)
+            executor.submit(
+                scrape_company_with_pool,
+                company,
+                api_cse_queue,
+                tavily_keys
+            ): company
+            for company in company_order
         }
         for future in as_completed(future_to_company):
             result = future.result()
@@ -507,20 +528,11 @@ def main(primary_prompt, secondary_prompt, third_prompt, fourth_prompt, domain_n
         )
     )
 
-    # Save to JSON
-    sorted_outfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../outputs', 'final_result.json')
-    with open(sorted_outfile, 'w', encoding='utf-8') as f:
-        json.dump(scraped_sorted, f, indent=2, ensure_ascii=False)
-    # Always create the file, even if empty
-    if not scraped_sorted:
-        with open(sorted_outfile, 'w', encoding='utf-8') as f:
-            json.dump([], f, indent=2, ensure_ascii=False)
-        print(f"⚠️ No valid companies found. Created empty {sorted_outfile}")
-    print("✅ All companies processed and saved.")
+    # Instead, just return the data as a list from the function(s) that previously saved to file.
+    return scraped_sorted
 
 
-def main_in_memory(primary_prompt, secondary_prompt, third_prompt, fourth_prompt,
-                  domain_name, domain_search, major_domain, startup_data):
+def main_in_memory(primary_prompt, secondary_prompt, third_prompt, fourth_prompt, domain_name, domain_search, major_domain, startup_data):
     """In-memory version of main() that doesn't use files, now with API key rotation"""
     competitors = []
     try:
@@ -539,7 +551,7 @@ def main_in_memory(primary_prompt, secondary_prompt, third_prompt, fourth_prompt
             all_companies.extend(companies)
         # Remove duplicates
         all_companies = list(set(all_companies))
-        # Get detailed info for each company
+        #Get detailed info for each company
         for company in all_companies:
             details = scrape_company(company, google_keys, cse_ids, tavily_keys)
             if details:
@@ -558,17 +570,49 @@ def main_in_memory(primary_prompt, secondary_prompt, third_prompt, fourth_prompt
             "error": str(e)
         }
 
-def is_valid_company(company):
-    details = company.get("details", {})
-    if not details:
-        return False
-    if (
-        not details.get("Industries") and
-        not details.get("Verticals") and
-        not details.get("Social Media")
-    ):
-        return False
-    return True
+
+def scrape_company_with_pool(company, api_cse_queue, tavily_keys):
+    api_key, cse_id = api_cse_queue.get()
+    try:
+        print(f"[POOL] Scraping '{company}' with API key: {api_key}, CSE ID: {cse_id}")
+        result = scrape_company(company, api_key, cse_id, tavily_keys)
+        return result
+    finally:
+        api_cse_queue.put((api_key, cse_id))
+
+
+if __name__ == "__main__":
+    # Example prompts and startup data for testing
+    primary_prompt = f"top diabetes startups f6s india"
+    secondary_prompt = f"top telemedicine companies tracxn india"
+    third_prompt = f"top diabetes companies tracxn india"
+    fourth_prompt = f"top telemedicine startups f6s india"
+    domain_name = "HealthTech"
+    domain_search = "diabetes"
+    major_domain = "telemedicine"
+    startup_data = {
+        "title": "AI Health Platform",
+        "description": "A platform using AI to provide digital health solutions in India.",
+        "tech_stack": ["Python", "TensorFlow", "React"],
+        "domain": "diabetes",
+        "major_domain": "telemedicine"
+    }
+
+    print("🚀 Running competitor scraping pipeline test...")
+    scraped_companies = main(
+        primary_prompt,
+        secondary_prompt,
+        third_prompt,
+        fourth_prompt,
+        domain_name,
+        domain_search,
+        major_domain,
+        startup_data
+    )
+
+    print(scraped_companies)
+
+
 
 
 
