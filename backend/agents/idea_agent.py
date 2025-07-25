@@ -16,6 +16,9 @@ import tempfile
 import pygame
 import io
 import random
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../utils')))
+from utils import info_tracker
 
 # Configure logging
 logging.basicConfig(
@@ -351,6 +354,13 @@ Be engaging, supportive, and genuinely curious about their idea!"""
             logger.error(f"Together AI query failed: {str(e)}")
             return "Tell me more about your startup idea!"
 
+    def check_info_completion(self, conversation: list) -> tuple[bool, dict]:
+        """Check if enough info is present in the conversation using info_tracker util."""
+        # Extract only user/assistant messages
+        messages = [msg['content'] for msg in conversation if msg['role'] in ('user', 'assistant')]
+        info, is_done = info_tracker.extract_startup_info(messages)
+        return is_done, info
+
     def chat_step(self, conversation: str, user_message: str) -> Tuple[str, str, bool]:
         """Enhanced chat step with conversation tracking"""
         
@@ -360,13 +370,20 @@ Be engaging, supportive, and genuinely curious about their idea!"""
         # Use conversation tracker for more natural responses
         response = self.tracker.generate_contextual_response(user_message, conversation)
         
-        # Check if ready to summarize
-        ready = "✅" in response and ("enough information" in response or "create your startup summary" in response)
+        # Check if ready to summarize (rule-based)
+        # Parse conversation into list of dicts
+        convo_list = []
+        for line in conversation.split('\n'):
+            if line.startswith('💬 You:'):
+                convo_list.append({'role': 'user', 'content': line.replace('💬 You:', '').strip()})
+            elif line.startswith('🤖'):
+                convo_list.append({'role': 'assistant', 'content': line.replace('🤖', '').strip()})
+        is_done, _ = self.check_info_completion(convo_list)
         
         # Add assistant response with emoji
         conversation += f"🤖 {response}\n"
         
-        return response, conversation, ready
+        return response, conversation, is_done
 
     def interactive_session(self) -> Tuple[str, str]:
         """Interactive session with improved flow"""
@@ -398,20 +415,21 @@ Be engaging, supportive, and genuinely curious about their idea!"""
             conversation += f"🤖 {response}\n"
             
             # Continue conversation until ready
-            while "✅" not in response or "enough information" not in response:
+            while True:
                 user_input = input("💬 You: ").strip()
                 if not user_input:
                     user_reply = asyncio.run(self.transcribe_live())
                 else:
                     user_reply = user_input
                 
-                response, conversation, ready = self.chat_step(conversation, user_reply)
+                response, conversation, is_done = self.chat_step(conversation, user_reply)
                 print(f"🤖 {response}")
                 
                 if hasattr(self, 'speak_response'):
                     self.speak_response(response)
                     
-                if ready:
+                if is_done:
+                    print("✅ Enough information gathered for summary (rule-based).\n")
                     break
             
             return user_idea, conversation

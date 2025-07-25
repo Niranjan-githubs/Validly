@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 import uuid
 from typing import Dict, Any
-
 # Import routes
 from .routes import chat
 
@@ -12,6 +11,8 @@ from .services.redis import RedisService
 from .services.firebase import FirebaseService
 from .deps.firebase_auth import get_current_user
 from utils.session_utils import get_user_session
+from utils.dashboard_transformer import transform_dashboard_data
+
 
 
 # Import models
@@ -307,5 +308,8 @@ def get_analysis_results(session_id: str, user=Depends(get_current_user)):
             raise HTTPException(status_code=202, detail="Analysis in progress")
         else:
             raise HTTPException(status_code=404, detail="Analysis results not found")
+        
     
-    return complete_analysis
+    dashboard_data = transform_dashboard_data(complete_analysis)
+    return dashboard_data
+    # return complete_analysis
