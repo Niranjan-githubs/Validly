@@ -10,7 +10,6 @@ import re
 import asyncio
 import aiohttp
 import pyaudio
-from deepgram import Deepgram
 from gtts import gTTS
 import tempfile
 import pygame
@@ -285,12 +284,9 @@ class StartupIdeaAnalyzer:
         try:
             load_dotenv(override=True)
             together_api_key = os.getenv("TOGETHER_API_KEY")
-            self.deepgram_api_key = os.getenv("DEEPGRAM_API_KEY")
             
             if not together_api_key:
                 raise ValueError("TOGETHER_API_KEY environment variable is not set")
-            if not self.deepgram_api_key:
-                raise ValueError("DEEPGRAM_API_KEY environment variable is not set")
                 
             self.client = Together(api_key=together_api_key)
             self.audio = pyaudio.PyAudio()

@@ -1,8 +1,35 @@
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 import uuid
 from typing import Dict, Any
+import os
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="FoundrScan API",
+    description="AI-powered startup analysis and validation platform",
+    version="1.0.0",
+    swagger_ui_init_oauth={},
+)
+# Configure CORS
+origins = [
+    "http://localhost:5174",  # Vite dev server
+    "http://localhost:5173",  # Alternative Vite port
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=False,  # Changed to False since we're using Bearer token
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["*"]
+)
+
+
 # Import routes
 from .routes import chat
 
@@ -104,6 +131,47 @@ def get_chat_summary(req: SummaryRequest, user=Depends(get_current_user)):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
+
+@app.get("/api/chat/summary", response_model=SummaryResponse, dependencies=[Depends(bearer_scheme)])
+def get_or_generate_chat_summary(
+        request: Request,
+        session_id: str = Query(..., description="The ID of the session to retrieve summary for"),
+        user=Depends(get_current_user)
+):
+        try:
+            uid = user["uid"]
+            session_ref = firebase_service.db.collection('outputs').document(uid).collection('sessions').document(session_id)
+            session_doc = session_ref.get()
+
+            if not session_doc.exists:
+                raise HTTPException(status_code=404, detail="Session not found")
+
+                session_data = session_doc.to_dict()
+
+            summary = session_data.get("summary")
+            if summary:
+                return SummaryResponse(summary=summary, session_id=session_id)
+
+            # Reuse logic from POST endpoint: regenerate summary
+            analyzer = StartupIdeaAnalyzer()
+            conversation = session_data["conversation"]
+            user_idea = session_data.get("initial_idea", "")
+            if not user_idea:
+                for msg in conversation:
+                    if msg.get("role") == "user":
+                        user_idea = msg.get("content", "")
+                        break
+
+            summary_obj = analyzer.generate_summary(user_idea, conversation)
+            summary_dict = summary_obj.to_dict()
+
+            # Save the new summary to Firestore
+            session_ref.update({"summary": summary_dict})
+
+            return SummaryResponse(summary=summary_dict, session_id=session_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to generate or retrieve summary: {str(e)}")
+
 
 @app.post("/api/analysis/start", response_model=AnalysisResponse)
 def start_analysis(req: AnalysisRequest, background_tasks: BackgroundTasks, user=Depends(get_current_user)):

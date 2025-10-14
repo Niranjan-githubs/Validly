@@ -1,13 +1,19 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
-
+from pydantic import BaseModel
 import uuid
 import tempfile
 import os
 from typing import Optional, List
 from gtts import gTTS
 import requests
+
+class SessionResponse(BaseModel):
+    session_id: str
+    initial_idea: str = ""
+    analysis_status: str = ""
+    created_at: str = ""
 
 from ..models.chat import ChatRequest, ChatResponse, VoiceRequest, VoiceResponse
 from ..services.redis import RedisService
@@ -22,6 +28,31 @@ bearer_scheme = HTTPBearer()
 # Initialize services
 redis_service = RedisService()
 firebase_service = FirebaseService()
+
+@router.get("/sessions")
+async def get_sessions(current_user: dict = Depends(get_current_user)) -> List[SessionResponse]:
+    """Get all chat sessions for the current user"""
+    try:
+        uid = current_user['uid']
+        # Query Firestore for all sessions under this user's collection
+        sessions_ref = firebase_service.db.collection('outputs').document(uid).collection('sessions').stream()
+        
+        sessions = []
+        for doc in sessions_ref:
+            session_data = doc.to_dict()
+            sessions.append(SessionResponse(
+                session_id=doc.id,
+                initial_idea=session_data.get('initial_idea', ''),
+                analysis_status=session_data.get('status', ''),
+                created_at=session_data.get('created_at', '')
+            ))
+        
+        # Sort sessions by created_at in descending order
+        sessions.sort(key=lambda x: x.created_at, reverse=True)
+        return sessions
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve sessions: {str(e)}")
 
 def process_chat_and_webhook(req, session_id, uid):
     try:
@@ -237,11 +268,35 @@ async def list_user_sessions(user=Depends(get_current_user)):
     uid = user["uid"]
     try:
         sessions_ref = firebase_service.db.collection('outputs').document(uid).collection('sessions')
-        sessions = sessions_ref.stream()
-        session_ids = [session.id for session in sessions]
-        return session_ids
+        sessions = []
+        for doc in sessions_ref.stream():
+            data = doc.to_dict()
+            sessions.append({
+                "session_id": doc.id,
+                "initial_idea": data.get("initial_idea", ""),
+                "analysis_status": data.get("analysis_status", ""),
+                "created_at": data.get("created_at", "")
+            })
+        return sessions
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list sessions: {str(e)}")
+
+@router.get("/sessions", response_model=List[str], dependencies=[Depends(bearer_scheme)])
+async def list_user_sessions(user=Depends(get_current_user)):
+    """List all session IDs for the authenticated user"""
+    uid = user["uid"]
+    try:
+        # Get all sessions from Firestore for this user
+        sessions_ref = firebase_service.db.collection('outputs').document(uid).collection('sessions')
+        sessions = [doc.id for doc in sessions_ref.stream()]
+        return sessions
+        
+    except Exception as e:
+        print(f"Error listing sessions: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list sessions: {str(e)}"
+        )
 
 @router.post("/voice")
 async def chat_voice_endpoint(
@@ -302,4 +357,4 @@ async def get_latest_audio(session_id: str):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate audio: {str(e)}"
-        ) 
+        )

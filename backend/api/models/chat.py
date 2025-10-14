@@ -5,6 +5,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     use_voice: Optional[bool] = False
+    webhook_url: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
