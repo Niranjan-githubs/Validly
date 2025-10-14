@@ -1,61 +1,96 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Zap, Target } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Target, Loader2 } from 'lucide-react';
+import { getAuth } from 'firebase/auth';
 import CompetitorCard from './CompetitorCard';
+
+interface SocialMedia {
+  Twitter?: string;
+  LinkedIn?: string;
+  [key: string]: string | undefined;
+}
+
+interface Competitor {
+  name: string;
+  description: string | null;
+  employees: string | null;
+  funding: string | null;
+  headquarters: string | null;
+  industries: string[] | null;
+  ownership_status: string | null;
+  revenue: string | null;
+  social_media: SocialMedia | null;
+  status: string | null;
+  url: string;
+  verticals: string[] | null;
+  website: string | null;
+  year_founded: string | null;
+}
 
 const CompetitorIntelligence: React.FC = () => {
   const navigate = useNavigate();
+  const { sessionId } = useParams();
+  const [competitors, setCompetitors] = useState<Competitor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const competitors = [
-    {
-      name: 'TechValidate Pro',
-      fundingRaised: '$12.5M Series A',
-      differentiators: [
-        'Focus on B2B SaaS validation',
-        'Manual analyst involvement',
-        'Limited AI integration'
-      ],
-      description: 'Established player in startup validation with traditional consulting approach and human-heavy analysis processes.',
-      threatLevel: 'High' as 'High',
-      marketShare: '23%'
-    },
-    {
-      name: 'StartupScanner',
-      fundingRaised: '$8.2M Seed',
-      differentiators: [
-        'Market research emphasis',
-        'Static reporting format',
-        'Geographic limitations'
-      ],
-      description: 'Market research focused platform with comprehensive data collection but limited real-time AI analysis capabilities.',
-      threatLevel: 'Medium' as 'Medium',
-      marketShare: '18%'
-    },
-    {
-      name: 'IdeaMetrics',
-      fundingRaised: '$15.7M Series B',
-      differentiators: [
-        'Enterprise-only focus',
-        'High pricing tier',
-        'Complex onboarding'
-      ],
-      description: 'Enterprise-focused validation platform with sophisticated analytics but limited accessibility for early-stage startups.',
-      threatLevel: 'Medium' as 'Medium',
-      marketShare: '31%'
-    },
-    {
-      name: 'VentureCheck',
-      fundingRaised: '$6.3M Pre-Series A',
-      differentiators: [
-        'VC network integration',
-        'Limited analysis depth',
-        'Narrow industry focus'
-      ],
-      description: 'Investor-network focused platform with strong connections but limited comprehensive validation capabilities.',
-      threatLevel: 'Low' as 'Low',
-      marketShare: '12%'
+  useEffect(() => {
+    const fetchCompetitors = async () => {
+      try {
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        // Get Firebase ID token
+        const auth = getAuth();
+        const user = auth.currentUser;
+        if (!user) {
+          throw new Error('User not authenticated');
+        }
+        const token = await user.getIdToken();
+        const response = await fetch(`${apiBaseUrl}/api/analysis/results/${sessionId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error('Failed to fetch competitors data');
+        }
+        const data = await response.json();
+        const competitorsData = data.competitors || [];
+        const validCompetitors = competitorsData.filter((comp: any) => comp.name && comp.url);
+        setCompetitors(validCompetitors);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load competitors');
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (sessionId) {
+      fetchCompetitors();
     }
-  ];
+  }, [sessionId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-red-500 text-center">
+          <p className="text-xl mb-4">Error loading competitors</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-white"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">

@@ -1,103 +1,33 @@
 
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, DollarSign, TrendingUp, Target, AlertTriangle, Shield, Zap } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Target, Loader2 } from 'lucide-react';
+import { getAuth } from 'firebase/auth';
 
 interface Investor {
   name: string;
-  funding: string;
-  differentiators: string[];
-  description: string;
-  threatLevel: 'High' | 'Medium' | 'Low';
-  marketShare: string;
+  focus: string;
+  typical_check: string;
 }
 
-const getThreatColor = (level: string) => {
-  switch (level) {
-    case 'High': return { bg: 'from-red-500 to-orange-500', glow: 'shadow-red-500/25', text: 'text-red-400' };
-    case 'Medium': return { bg: 'from-yellow-500 to-orange-500', glow: 'shadow-yellow-500/25', text: 'text-yellow-400' };
-    case 'Low': return { bg: 'from-green-500 to-emerald-500', glow: 'shadow-green-500/25', text: 'text-green-400' };
-    default: return { bg: 'from-gray-500 to-gray-600', glow: 'shadow-gray-500/25', text: 'text-gray-400' };
-  }
-};
-
-const getThreatIcon = (level: string) => {
-  switch (level) {
-    case 'High': return AlertTriangle;
-    case 'Medium': return Shield;
-    case 'Low': return Zap;
-    default: return Shield;
-  }
-};
-
-const VCInvestorCard: React.FC<{ investor: Investor; index: number }> = ({ investor, index }) => {
-  const threatStyle = getThreatColor(investor.threatLevel);
-  const ThreatIcon = getThreatIcon(investor.threatLevel);
-
+const InvestorCard: React.FC<{ investor: Investor; index: number; type: 'vc' | 'angel' }> = ({ investor, index, type }) => {
   return (
-    <div 
-      className="group relative bg-gradient-to-br from-black via-[#111] to-black border border-[#222] rounded-3xl p-8 shadow-xl hover:shadow-blue-500/20 transition-all duration-700 hover:scale-105 animate-fade-in-up overflow-hidden"
+    <div
+      className={`group relative bg-gradient-to-br from-black via-[#111] to-black border border-[#222] rounded-3xl p-8 shadow-xl hover:shadow-blue-500/20 transition-all duration-700 hover:scale-105 animate-fade-in-up overflow-hidden`}
       style={{ animationDelay: `${index * 150}ms` }}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
       <div className="relative z-10">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-8">
-          <div className="flex-1">
-            <h3 className="text-2xl font-bold bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent group-hover:from-blue-100 group-hover:to-purple-100 transition-all duration-500 mb-2">
-              {investor.name}
-            </h3>
-            <div className="flex items-center gap-3 text-[#CCCCCC]">
-              <DollarSign className="w-4 h-4" />
-              <span className="text-sm font-medium">{investor.funding}</span>
-            </div>
+        <div className="flex items-center gap-4 mb-4">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${type === 'vc' ? 'bg-gradient-to-r from-blue-500 to-green-500' : 'bg-gradient-to-r from-pink-500 to-yellow-500'}`}>
+            <Target className="w-5 h-5 text-white" />
           </div>
-          {/* Threat Level Indicator */}
-          <div className={`flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r ${threatStyle.bg} ${threatStyle.glow} shadow-lg`}>
-            <ThreatIcon className="w-3 h-3 text-white" />
-            <span className="text-xs font-bold text-white">{investor.threatLevel}</span>
-          </div>
-          <div className="text-xs text-[#CCCCCC]">
-            Market: {investor.marketShare}
-          </div>
+          <h3 className="text-xl font-bold bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent group-hover:from-blue-100 group-hover:to-purple-100 transition-all duration-500">
+            {investor.name}
+          </h3>
         </div>
-        {/* Description */}
-        <p className="text-[#CCCCCC] leading-relaxed mb-8 group-hover:text-white/90 transition-colors duration-500 text-lg font-light">
-          {investor.description}
-        </p>
-        {/* Differentiators */}
-        <div className="space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/25">
-              <Target className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold text-white text-lg">Key Differentiators</span>
-          </div>
-          <ul className="space-y-3">
-            {investor.differentiators.map((diff, idx) => (
-              <li 
-                key={idx}
-                className="flex items-start gap-4 text-[#CCCCCC] group-hover:text-white/90 transition-colors duration-500"
-              >
-                <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full mt-2 flex-shrink-0 shadow-lg shadow-blue-500/25 group-hover:shadow-purple-500/25 transition-all duration-500"></div>
-                <span className="font-medium">{diff}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        {/* Performance Indicator */}
-        <div className="mt-8 pt-6 border-t border-[#333333] group-hover:border-blue-400/30 transition-colors duration-500">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/25">
-                <TrendingUp className="w-3 h-3 text-white" />
-              </div>
-              <span className="text-sm font-semibold text-white">Threat Assessment</span>
-            </div>
-            <div className={`px-3 py-1 rounded-full border ${threatStyle.text} border-current`}>
-              <span className="text-xs font-bold">{investor.threatLevel} Risk</span>
-            </div>
-          </div>
-        </div>
+        <div className="mb-2 text-[#CCCCCC] text-base"><span className="font-semibold">Focus:</span> {investor.focus}</div>
+        <div className="mb-2 text-[#CCCCCC] text-base"><span className="font-semibold">Typical Check:</span> {investor.typical_check}</div>
       </div>
     </div>
   );
@@ -105,56 +35,67 @@ const VCInvestorCard: React.FC<{ investor: Investor; index: number }> = ({ inves
 
 const VCInvestorCardDetails: React.FC = () => {
   const navigate = useNavigate();
-  const investors: Investor[] = [
-    {
-      name: 'Alpha Ventures',
-      funding: '$20M Series B',
-      differentiators: [
-        'Global reach',
-        'AI-driven investment strategy',
-        'Strong founder support'
-      ],
-      description: 'Leading VC firm with a focus on technology startups and AI-powered market analysis.',
-      threatLevel: 'High',
-      marketShare: '28%'
-    },
-    {
-      name: 'Beta Capital',
-      funding: '$10M Series A',
-      differentiators: [
-        'Early-stage focus',
-        'Diverse portfolio',
-        'Fast decision cycles'
-      ],
-      description: 'Active investor in early-stage startups with a diverse portfolio and quick investment decisions.',
-      threatLevel: 'Medium',
-      marketShare: '19%'
-    },
-    {
-      name: 'Gamma Partners',
-      funding: '$15M Seed',
-      differentiators: [
-        'Industry expertise',
-        'Mentorship programs',
-        'Flexible funding options'
-      ],
-      description: 'VC firm known for industry expertise and strong mentorship programs for founders.',
-      threatLevel: 'Low',
-      marketShare: '15%'
-    },
-    {
-      name: 'Delta Investors',
-      funding: '$8M Pre-Series A',
-      differentiators: [
-        'Niche market focus',
-        'Personalized guidance',
-        'Long-term partnerships'
-      ],
-      description: 'Investor group specializing in niche markets and long-term founder partnerships.',
-      threatLevel: 'Medium',
-      marketShare: '11%'
+  const { sessionId } = useParams();
+  const [vcList, setVcList] = useState<Investor[]>([]);
+  const [angelList, setAngelList] = useState<Investor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchInvestors = async () => {
+      try {
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const auth = getAuth();
+        const user = auth.currentUser;
+        if (!user) {
+          throw new Error('User not authenticated');
+        }
+        const token = await user.getIdToken();
+        const response = await fetch(`${apiBaseUrl}/api/analysis/results/${sessionId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error('Failed to fetch investors data');
+        }
+        const data = await response.json();
+        setVcList(data.venture_capitalists || []);
+        setAngelList(data.angel_investors || []);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load investors');
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (sessionId) {
+      fetchInvestors();
     }
-  ];
+  }, [sessionId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-red-500 text-center">
+          <p className="text-xl mb-4">Error loading investors</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-white"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
@@ -197,14 +138,18 @@ const VCInvestorCardDetails: React.FC = () => {
               Comprehensive analysis of key investors in the startup validation space with strategic positioning insights.
             </p>
           </div>
-          {/* Investors Grid */}
+          {/* Venture Capitalists */}
+          <h2 className="text-2xl font-bold text-blue-300 mb-6">Venture Capitalists</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-16">
+            {vcList.map((investor, index) => (
+              <InvestorCard key={investor.name} investor={investor} index={index} type="vc" />
+            ))}
+          </div>
+          {/* Angel Investors */}
+          <h2 className="text-2xl font-bold text-pink-300 mb-6">Angel Investors</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-            {investors.map((investor, index) => (
-              <VCInvestorCard 
-                key={investor.name} 
-                investor={investor} 
-                index={index}
-              />
+            {angelList.map((investor, index) => (
+              <InvestorCard key={investor.name} investor={investor} index={index} type="angel" />
             ))}
           </div>
         </div>

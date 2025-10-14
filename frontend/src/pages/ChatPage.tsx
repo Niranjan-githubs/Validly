@@ -6,6 +6,7 @@ import Navbar from '../components/common/Navbar';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import styles from './ChatPage.module.css';
+import { auth } from '../firebase';
 
 interface ChatMessage {
   id: string;
@@ -28,6 +29,7 @@ const ChatPage: React.FC = () => {
    const [loading, setLoading] = useState(false);
    const [sessionId, setSessionId] = useState<string | null>(null);
    const [isSpeaking, setIsSpeaking] = useState(false);
+   const [analysisStarted, setAnalysisStarted] = useState(false);
    const videoRef = useRef<HTMLVideoElement>(null);
    const messagesEndRef = useRef<HTMLDivElement>(null);
    const audioRef = useRef<HTMLAudioElement>(null);
@@ -45,10 +47,8 @@ const ChatPage: React.FC = () => {
    useEffect(() => {
      const loadChatHistory = async () => {
        if (user) {
-         console.log('Loading chat history for user:', user.uid);
          try {
            const data = await getUserOutput(user);
-           console.log('Loaded chat history:', data);
            if (data?.output?.messages) {
              setMessages(data.output.messages as ChatMessage[]);
            }
@@ -99,10 +99,39 @@ const ChatPage: React.FC = () => {
      }
    };
  
+   // Manual analysis trigger
+   const handleRunAnalysis = async () => {
+     if (!sessionId || !user) return;
+     setLoading(true);
+     try {
+       const currentUser = auth.currentUser;
+       if (!currentUser) throw new Error('Not authenticated');
+       const token = await currentUser.getIdToken();
+       await fetch('http://localhost:8000/api/analysis/start', {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+           'Accept': 'application/json',
+           'Authorization': `Bearer ${token}`,
+         },
+         body: JSON.stringify({
+           startup_data: {
+             session_id: sessionId,
+           }
+         }),
+       });
+       setAnalysisStarted(true);
+     } catch (error) {
+       // Optionally show error
+     } finally {
+       setLoading(false);
+     }
+   };
+
    const handleSubmit = async (e: React.FormEvent) => {
      e.preventDefault();
      if (!input.trim() || !user) return;
- 
+
      setLoading(true);
      try {
        // Add user message
@@ -112,92 +141,80 @@ const ChatPage: React.FC = () => {
          sender: 'user',
          timestamp: new Date(),
        };
-       const newMessages = [...messages, userMessage];
+       // Add a temporary 'thinking...' AI message
+       const thinkingMessage: ChatMessage = {
+         id: (Date.now() + 0.5).toString(),
+         content: 'Thinking... ',
+         sender: 'ai',
+         timestamp: new Date(),
+       };
+       const newMessages = [...messages, userMessage, thinkingMessage];
        setMessages(newMessages);
        setInput('');
- 
+
+       // Get Firebase ID token
+       const currentUser = auth.currentUser;
+       if (!currentUser) throw new Error('Not authenticated');
+       const token = await currentUser.getIdToken();
+
        // Call the API
        const res = await fetch('http://localhost:8000/api/chat', {
          method: 'POST',
          headers: {
            'Content-Type': 'application/json',
            'Accept': 'application/json',
+           'Authorization': `Bearer ${token}`,
          },
          body: JSON.stringify({
            message: input,
            session_id: sessionId,
          }),
        });
- 
+
        if (!res.ok) {
          throw new Error(`API Error: ${res.status}`);
        }
- 
+
        const data = await res.json();
        if (data.session_id && !sessionId) {
          setSessionId(data.session_id);
        }
- 
+
+       // Replace the 'thinking...' message with the real response
        const aiMessage: ChatMessage = {
          id: (Date.now() + 1).toString(),
          content: data.response || '⚠️ No response received from API.',
          sender: 'ai',
          timestamp: new Date(),
        };
-       const updatedMessages = [...newMessages, aiMessage];
-       setMessages(updatedMessages);
+       setMessages((prev) => {
+         // Remove the last message if it's the thinking message
+         const prevWithoutThinking = prev.slice(0, -1);
+         return [...prevWithoutThinking, aiMessage];
+       });
        
        // Speak the AI response
        await speakResponse(data.response);
- 
+
        await storeUserOutput(user, {
-         messages: updatedMessages,
+         messages: [...newMessages.slice(0, -1), aiMessage],
          lastUpdated: new Date()
        });
-       if (data.done) {
-         try {
-           const summaryRes = await fetch('http://localhost:8000/api/chat/summary', {
-             method: 'POST',
-             headers: {
-               'Content-Type': 'application/json',
-               'Accept': 'application/json',
-             },
-             body: JSON.stringify({ session_id: data.session_id }),
-           });
- 
-           if (!summaryRes.ok) {
-             throw new Error(`Summary API Error: ${summaryRes.status}`);
-           }
- 
-           const summaryData = await summaryRes.json();
-           const summaryMessage: ChatMessage = {
-             id: (Date.now() + 2).toString(),
-             content: `📝 Summary:\n${JSON.stringify(summaryData.summary, null, 2)}`,
-             sender: 'ai',
-             timestamp: new Date(),
-           };
-           setMessages((prev) => [...prev, summaryMessage]);
-         } catch (error) {
-           console.error('Error fetching summary:', error);
-           const errorMessage: ChatMessage = {
-             id: (Date.now() + 3).toString(),
-             content: `⚠️ Error fetching summary: ${error instanceof Error ? error.message : 'Unknown error'}`,
-             sender: 'ai',
-             timestamp: new Date(),
-           };
-           setMessages((prev) => [...prev, errorMessage]);
-         }
-       }
- 
+       // Remove auto-trigger; user must click the button
+
      } catch (error) {
        console.error('Error in chat:', error);
-       const errorMessage: ChatMessage = {
-         id: (Date.now() + 2).toString(),
-         content: `⚠️ API Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-         sender: 'ai',
-         timestamp: new Date(),
-       };
-       setMessages((prev) => [...prev, errorMessage]);
+       // Remove the thinking message if present, then add error
+       setMessages((prev) => {
+         const prevWithoutThinking = prev[prev.length - 1]?.content === 'Thinking... 🤔' ? prev.slice(0, -1) : prev;
+         const errorMessage: ChatMessage = {
+           id: (Date.now() + 2).toString(),
+           content: `⚠️ API Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+           sender: 'ai',
+           timestamp: new Date(),
+         };
+         return [...prevWithoutThinking, errorMessage];
+       });
      } finally {
        setLoading(false);
      }
@@ -304,6 +321,7 @@ const ChatPage: React.FC = () => {
                    )}
                  </Button>
                </form>
+               {/* Run Analysis Button removed as requested */}
              </div>
            </div>
          </div>

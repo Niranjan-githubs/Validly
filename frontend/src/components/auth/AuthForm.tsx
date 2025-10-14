@@ -99,19 +99,15 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
     } catch (err: any) {
       console.error('❌ Auth error:', err);
       let errorMessage = 'An error occurred during authentication';
-      let showSignupLink = false;
-      
       switch (err.code) {
         case 'auth/user-not-found':
           errorMessage = 'No account found with this email. Please sign up first.';
-          showSignupLink = true;
           break;
         case 'auth/wrong-password':
           errorMessage = 'Incorrect password';
           break;
         case 'auth/invalid-credential':
           errorMessage = 'Invalid email or password. Please check your credentials or sign up if you haven\'t already.';
-          showSignupLink = true;
           break;
         case 'auth/email-already-in-use':
           errorMessage = 'An account already exists with this email';
@@ -126,23 +122,6 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
           errorMessage = err.message;
       }
       setError(errorMessage);
-
-      // Show error with signup link if needed
-      return (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-md">
-          <p className="text-red-500 text-sm">{errorMessage}</p>
-          {showSignupLink && (
-            <div className="mt-2">
-              <Link
-                to="/signup"
-                className="text-sm text-purple-400 hover:text-purple-300 font-medium transition-colors"
-              >
-                Create an account →
-              </Link>
-            </div>
-          )}
-        </div>
-      );
     } finally {
       setLoading(false);
     }
@@ -218,24 +197,16 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
     } catch (err: any) {
       console.error('❌ Google auth error:', err);
       let errorMessage = 'An error occurred during Google authentication';
-      let showSignupLink = false;
-      
       if (err.code === 'auth/popup-closed-by-user') {
         errorMessage = 'Google sign-in was cancelled';
       } else if (err.code === 'auth/popup-blocked') {
         errorMessage = 'Pop-up was blocked by the browser';
       } else if (err.code === 'auth/invalid-credential') {
         errorMessage = 'Unable to sign in with Google. Please try signing up first.';
-        showSignupLink = true;
       } else if (err.code === 'auth/account-exists-with-different-credential') {
         errorMessage = 'An account already exists with this email using a different sign-in method.';
-        showSignupLink = true;
       }
-      
       setError(errorMessage);
-
-      // Show error with signup link if needed
-      // Note: This error display logic is outside the main return block, so it might not render correctly here.
       // The main error rendering is handled in the JSX below.
     } finally {
       setLoading(false);

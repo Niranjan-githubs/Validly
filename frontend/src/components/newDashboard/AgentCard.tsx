@@ -7,6 +7,7 @@ interface Agent {
   id: string;
   status: 'active' | 'processing' | 'completed' | 'idle';
   icon: React.ElementType;
+  sessionId?: string;
 }
 
 interface AgentCardProps {
@@ -17,16 +18,36 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent }) => {
   const navigate = useNavigate();
 
   const handleSeeDetails = () => {
-    if (agent.id === 'competitor-intelligence') {
-      navigate('/new-dashboard/CompetitorIntelligence');
-    } else if (agent.id === 'user-pain-points') {
-      navigate('/new-dashboard/userpainpointDetails');
-    } else if (agent.id === 'vc-matching') {
-      navigate('/new-dashboard/VCInvestorCardDetails');
-    } else if (agent.id === 'market-analysis') {
-      navigate('/new-dashboard/MarketAnalysisDetail');
-    } else if (agent.id === 'risk-assessment') {
-      navigate('/new-dashboard/RiskAssessmentDetail');
+    if (agent.id === 'competitor_analysis') {
+      if (!agent.sessionId) {
+        alert('Please select a session from the sidebar before viewing competitor analysis.');
+        return;
+      }
+      navigate(`/new-dashboard/agent/competitor_analysis/${agent.sessionId}`);
+    } else if (agent.id === 'user_pain_points') {
+      if (!agent.sessionId) {
+        alert('Please select a session from the sidebar before viewing user pain points.');
+        return;
+      }
+      navigate(`/new-dashboard/agent/userpainpointDetails/${agent.sessionId}`);
+    } else if (agent.id === 'vc_matching') {
+      if (!agent.sessionId) {
+        alert('Please select a session from the sidebar before viewing VC matching.');
+        return;
+      }
+      navigate(`/new-dashboard/agent/VCInvestorCardDetails/${agent.sessionId}`);
+    } else if (agent.id === 'market_analysis') {
+      if (!agent.sessionId) {
+        alert('Please select a session from the sidebar before viewing market analysis.');
+        return;
+      }
+      navigate(`/new-dashboard/agent/MarketAnalysisDetail/${agent.sessionId}`);
+    } else if (agent.id === 'risk_assessment') {
+      if (!agent.sessionId) {
+        alert('Please select a session from the sidebar before viewing risk assessment.');
+        return;
+      }
+      navigate(`/new-dashboard/agent/RiskAssessmentDetail/${agent.sessionId}`);
     } else {
       navigate(`/new-dashboard/agent/${agent.id}`);
     }

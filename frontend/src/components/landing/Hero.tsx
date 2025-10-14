@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import Spline from '@splinetool/react-spline';
-import { Link, useNavigate } from 'react-router-dom';
-import { Brain, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import GradientText from '../common/GradientText';
 import Button from '../common/Button';
-import SplineFooterCover from './SplineFooterCover';
+import SplineFooterCover from './SplineFooterCover.tsx';
 
 const Hero: React.FC = () => {
   const [loading, setLoading] = useState(true);

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { auth } from '../../firebase';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import AgentCard from './AgentCard';
@@ -7,16 +8,22 @@ import SummaryCard from './SummaryCard';
 
 const Dashboard: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
 
   const agents = [
-    { name: 'Competitors', id: 'competitor-intelligence', icon: Zap, status: 'active' as 'active' },
-    { name: 'Market Analysis', id: 'market-analysis', icon: Activity, status: 'processing' as 'processing' },
-    { name: 'VC Matching', id: 'vc-matching', icon: Users, status: 'idle' as 'idle' },
-    { name: 'Risk Assessment', id: 'risk-assessment', icon: Shield, status: 'completed' as 'completed' },
-    { name: 'User Pain Points', id: 'user-pain-points', icon: Brain, status: 'active' as 'active' }
+    { name: 'Competitors', id: 'competitor_analysis', icon: Zap, status: 'idle' as const },
+    { name: 'Market Analysis', id: 'market_analysis', icon: Activity, status: 'idle' as const },
+    { name: 'VC Matching', id: 'vc_matching', icon: Users, status: 'idle' as const },
+    { name: 'User Pain Points', id: 'user_pain_points', icon: Brain, status: 'idle' as const },
+    { name: 'Risk Assessment', id: 'risk_assessment', icon: Shield, status: 'idle' as const }
   ];
 
   const navigate = useNavigate();
+
+  const handleSessionSelect = (sessionId: string) => {
+    setSelectedSession(sessionId);
+  };
+
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-black relative overflow-hidden">
       {/* Animated Background Elements */}
@@ -37,7 +44,7 @@ const Dashboard: React.FC = () => {
         }}></div>
       </div>
 
-      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} onSessionSelect={handleSessionSelect} />
 
       <main className={`flex-1 transition-all duration-500 relative z-10 ${sidebarCollapsed ? 'ml-4 sm:ml-20' : 'ml-16 sm:ml-64'}`}> {/* Responsive margin */}
         <div className="p-2 sm:p-4 md:p-8"> {/* Responsive padding */}
@@ -54,7 +61,36 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="flex flex-row gap-2 w-full sm:w-auto">
               <button
-                className="group relative bg-transparent text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-semibold transition-all duration-300 flex items-center gap-3 border border-white/10 hover:border-blue-400/30 w-full sm:w-auto"
+                className="group relative bg-transparent text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-semibold transition-all duration-300 flex items-center gap-3 border border-white/10 hover:border-blue-400/30 w-full sm:w-auto disabled:opacity-50"
+                onClick={async () => {
+                  if (!selectedSession) return;
+                  try {
+                    // Always get the latest Firebase ID token from the SDK
+                    const currentUser = auth.currentUser;
+                    if (!currentUser) throw new Error('Not authenticated');
+                    const token = await currentUser.getIdToken();
+                    const res = await fetch(`http://localhost:8000/generate-pdf/${selectedSession}`, {
+                      method: 'GET',
+                      headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/pdf',
+                      },
+                    });
+                    if (!res.ok) throw new Error('Failed to generate PDF');
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `analysis_${selectedSession}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                  } catch (err) {
+                    alert('Failed to download PDF: ' + (err instanceof Error ? err.message : 'Unknown error'));
+                  }
+                }}
+                disabled={!selectedSession}
               >
                 <svg className="w-5 h-5 relative z-10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
                 Download Report
@@ -80,7 +116,7 @@ const Dashboard: React.FC = () => {
             {/* Single responsive grid for agent cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 w-full">
               {agents.map((agent) => (
-                <AgentCard key={agent.id} agent={agent} />
+                <AgentCard key={agent.id} agent={{ ...agent, sessionId: selectedSession || undefined }} />
               ))}
             </div>
           </div>

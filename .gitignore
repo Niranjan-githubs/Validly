@@ -101,3 +101,7 @@ build/
 
 backend/.env
 backend/founderscan-894e9-firebase-adminsdk-fbsvc-6a9f2d4e6a.json
+
+# Chrome browser files (too long filenames)
+backendmahaa/agents/chrome-mac-x64/
+backendmahaa/agents/chrome-mac-x64/**

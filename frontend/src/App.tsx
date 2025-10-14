@@ -1,3 +1,11 @@
+          <Route
+            path="/new-dashboard/agent/userpainpointDetails/:sessionId"
+            element={
+              <ProtectedRoute>
+                <UserPainpointDetails />
+              </ProtectedRoute>
+            }
+          />
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
@@ -39,14 +47,63 @@ function App() {
               </ProtectedRoute>
             }
           />
-          {/* New Dashboard Routes */}
-          <Route path="/new-dashboard" element={<NewDashboardPage />} />
-          <Route path="/new-dashboard/agent/:agentName" element={<AgentDetailPage />} />
-          <Route path="/new-dashboard/CompetitorIntelligence" element={<CompetitorIntelligence />} />
-          <Route path="/new-dashboard/userpainpointDetails" element={<UserPainpointDetails />} />
-          <Route path="/new-dashboard/VCInvestorCardDetails" element={<VCInvestorCardDetails investor={{ name: '', amountInvested: '', differentiators: [], description: '', inspiration: '', stage: 'Seed', marketFocus: '' }} index={0} />} />
-          <Route path="/new-dashboard/MarketAnalysisDetail" element={<MarketAnalysisDetail />} />
-          <Route path="/new-dashboard/RiskAssessmentDetail" element={<RiskAssessmentDetail />} />
+          {/* New Dashboard Session-Aware Routes */}
+          <Route
+            path="/new-dashboard"
+            element={
+              <ProtectedRoute>
+                <NewDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/new-dashboard/agent/:agentName/:sessionId"
+            element={
+              <ProtectedRoute>
+                <AgentDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/new-dashboard/agent/competitor_analysis/:sessionId"
+            element={
+              <ProtectedRoute>
+                <CompetitorIntelligence />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/new-dashboard/agent/VCInvestorCardDetails/:sessionId"
+            element={
+              <ProtectedRoute>
+                <VCInvestorCardDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/new-dashboard/agent/MarketAnalysisDetail/:sessionId"
+            element={
+              <ProtectedRoute>
+                <MarketAnalysisDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/new-dashboard/agent/userpainpointDetails/:sessionId"
+            element={
+              <ProtectedRoute>
+                <UserPainpointDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/new-dashboard/agent/RiskAssessmentDetail/:sessionId"
+            element={
+              <ProtectedRoute>
+                <RiskAssessmentDetail />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </AuthProvider>
     </Router>
