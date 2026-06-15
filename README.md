@@ -13,7 +13,7 @@
 </p>
 
 
-# 🚀 Validly: AI Startup Intelligence Platform
+#  Validly: AI Startup Intelligence Platform
 
 **Turn startup ideas into evidence-backed business insights.**
 
@@ -23,7 +23,7 @@ Unlike generic AI brainstorming tools, Validly uses a multi-agent workflow to tr
 
 ---
 
-## ✨ What Validly Does
+##  What Validly Does
 
 * 🧠 Startup Idea Validation
 * 🔍 Competitor Intelligence
@@ -35,7 +35,7 @@ Unlike generic AI brainstorming tools, Validly uses a multi-agent workflow to tr
 
 ---
 
-## 🏗️ How It Works
+##  How It Works
 
 1. Founder submits a startup idea.
 2. AI asks targeted validation questions.
@@ -46,35 +46,35 @@ Unlike generic AI brainstorming tools, Validly uses a multi-agent workflow to tr
 
 ---
 
-## 🧩 Core Analysis Agents
+##  Core Analysis Agents
 
-### 🧠 Idea Agent
+###  Idea Agent
 
 Collects startup context through a guided conversational workflow.
 
-### 🔍 Competitor Agent
+###  Competitor Agent
 
 Identifies competitors, analyzes positioning, and highlights market gaps.
 
-### 📈 Market Agent
+###  Market Agent
 
 Researches market opportunities, trends, and demand signals.
 
-### 🎯 User Pain Point Agent
+###  User Pain Point Agent
 
 Discovers customer frustrations and unmet needs.
 
-### ⚠️ Risk Agent
+###  Risk Agent
 
 Evaluates feasibility, execution risks, and potential challenges.
 
-### 💰 VC Mapping Agent
+###  VC Mapping Agent
 
 Provides investor and funding insights relevant to the startup domain.
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 ```text
 Validly/
@@ -226,7 +226,7 @@ http://localhost:5173
 
 ---
 
-## 🔄 Validation Workflow
+##  Validation Workflow
 
 ```text
 Founder Idea
@@ -255,7 +255,7 @@ Export Startup Report
 
 ---
 
-## 🎯 Use Cases
+##  Use Cases
 
 ### Founders
 
