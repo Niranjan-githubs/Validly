@@ -1,151 +1,135 @@
-#  Validly
+<p align="center">
+  <h1 align="center">🚀 Validly</h1>
+  <p align="center">
+    AI-Powered Startup Intelligence Platform
+  </p>
+</p>
 
-**AI-Powered Startup Intelligence Platform**
+<p align="center">
+  <img src="https://img.shields.io/badge/FastAPI-Backend-green">
+  <img src="https://img.shields.io/badge/React-Frontend-blue">
+  <img src="https://img.shields.io/badge/Firebase-Auth-orange">
+  <img src="https://img.shields.io/badge/License-MIT-yellow">
+</p>
 
-Validly helps founders validate startup ideas, analyze competitors, uncover user pain points, identify market opportunities, assess risks, and generate investor-ready startup reports.
 
-Instead of relying on guesswork, founders can transform a raw idea into structured, evidence-backed insights through an AI-driven validation workflow.
 
----
+# 🚀 Validly: AI Startup Intelligence Platform
 
-## ✨ Features
+**Turn startup ideas into evidence-backed business insights.**
 
-###  Startup Idea Validation
+Validly is an AI-powered startup intelligence platform that helps founders validate ideas, analyze competitors, uncover user pain points, identify market opportunities, assess startup risks, and generate structured startup reports.
 
-* Conversational startup discovery workflow
-* Guided founder interviews
-* Structured business context collection
-
-###  Competitor Intelligence
-
-* Competitor landscape analysis
-* Market positioning insights
-* Competitive gap identification
-
-###  Market Research
-
-* Market opportunity analysis
-* Industry trend identification
-* Demand signal discovery
-
-###  User Pain Point Analysis
-
-* Customer problem discovery
-* Pain point categorization
-* Opportunity mapping
-
-###  Risk Assessment
-
-* Startup risk evaluation
-* Feasibility analysis
-* Strategic recommendations
-
-###  Investor & VC Insights
-
-* Investor matching suggestions
-* Funding landscape insights
-* Startup-investor alignment
-
-###  Report Generation
-
-* Structured startup validation reports
-* Exportable PDF summaries
-* Shareable founder insights
+Unlike generic AI brainstorming tools, Validly uses a multi-agent workflow to transform vague startup ideas into actionable insights that help founders make better decisions faster.
 
 ---
 
-#  Architecture
+## ✨ What Validly Does
 
-```text
-                           ┌─────────────────┐
-                           │     Founder     │
-                           └────────┬────────┘
-                                    │
-                                    ▼
-                     ┌──────────────────────────┐
-                     │   Conversational Intake  │
-                     │      (Idea Agent)        │
-                     └──────────┬───────────────┘
-                                │
-                                ▼
-                ┌──────────────────────────────────┐
-                │     Startup Analysis Pipeline     │
-                └──────────┬──────────┬────────────┘
-                           │          │
-                           │          │
-        ┌──────────────────┘          └──────────────────┐
-        ▼                                                ▼
-
-┌────────────────┐                          ┌────────────────┐
-│ Market Agent   │                          │ Competitor     │
-│                │                          │ Agent          │
-└────────────────┘                          └────────────────┘
-
-┌────────────────┐                          ┌────────────────┐
-│ User Pain      │                          │ Risk Agent     │
-│ Point Agent    │                          │                │
-└────────────────┘                          └────────────────┘
-
-                           ┌────────────────┐
-                           │ VC Mapping     │
-                           │ Agent          │
-                           └────────────────┘
-
-                                    │
-                                    ▼
-
-                     ┌──────────────────────────┐
-                     │ Startup Intelligence Hub │
-                     └──────────┬───────────────┘
-                                │
-                                ▼
-                     ┌──────────────────────────┐
-                     │ Dashboard + PDF Reports  │
-                     └──────────────────────────┘
-```
+* 🧠 Startup Idea Validation
+* 🔍 Competitor Intelligence
+* 📈 Market Research & Trends
+* 🎯 User Pain Point Analysis
+* ⚠️ Risk Assessment
+* 💰 VC & Investor Mapping
+* 📄 Startup Report Generation
 
 ---
 
-# 📂 Project Structure
+## 🏗️ How It Works
+
+1. Founder submits a startup idea.
+2. AI asks targeted validation questions.
+3. Analysis agents run in parallel.
+4. Market, competitor, user, and risk insights are generated.
+5. Results are displayed in a unified dashboard.
+6. Founder exports a structured startup validation report.
+
+---
+
+## 🧩 Core Analysis Agents
+
+### 🧠 Idea Agent
+
+Collects startup context through a guided conversational workflow.
+
+### 🔍 Competitor Agent
+
+Identifies competitors, analyzes positioning, and highlights market gaps.
+
+### 📈 Market Agent
+
+Researches market opportunities, trends, and demand signals.
+
+### 🎯 User Pain Point Agent
+
+Discovers customer frustrations and unmet needs.
+
+### ⚠️ Risk Agent
+
+Evaluates feasibility, execution risks, and potential challenges.
+
+### 💰 VC Mapping Agent
+
+Provides investor and funding insights relevant to the startup domain.
+
+---
+
+## 📂 Project Structure
 
 ```text
 Validly/
 │
 ├── backend/
 │   ├── api/
-│   ├── core/
 │   ├── agents/
+│   ├── core/
 │   ├── utils/
 │   └── requirements.txt
 │
-└── frontend/
-    ├── src/
-    │   ├── pages/
-    │   ├── components/
-    │   └── services/
-    │
-    └── package.json
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   ├── components/
+│   │   ├── services/
+│   │   └── hooks/
+│   │
+│   └── package.json
+│
+└── README.md
 ```
 
 ---
 
+## ⚙️ Tech Stack
 
-# 🚦 Getting Started
-
-## Prerequisites
-
-Before running the project, install:
+### Backend
 
 * Python 3.10+
-* Node.js 18+
-* npm or yarn
+* FastAPI
+* Firebase Admin SDK
 * Redis
-* Firebase Project
-* OpenAI/Together AI API Keys
+* Pydantic
+* LangChain
+* OpenAI
+* Together AI
+* Uvicorn
+
+### Frontend
+
+* React 18
+* TypeScript
+* Vite
+* Tailwind CSS
+* Firebase Authentication
+* Firestore
+* React Router
 
 ---
 
-## Backend Setup
+## 🚀 Quick Start
+
+### Backend Setup
 
 ```bash
 cd backend
@@ -159,11 +143,9 @@ source .venv/bin/activate
 .venv\Scripts\activate
 
 pip install -r requirements.txt
-
-cp env.example .env
 ```
 
-Configure your `.env` file:
+Create a `.env` file:
 
 ```env
 API_HOST=0.0.0.0
@@ -194,21 +176,21 @@ or
 uvicorn api.main:app --reload
 ```
 
-### API Documentation
+Backend available at:
+
+```text
+http://localhost:8000
+```
+
+API documentation:
 
 ```text
 http://localhost:8000/docs
 ```
 
-### Health Check
-
-```text
-http://localhost:8000/health
-```
-
 ---
 
-## Frontend Setup
+### Frontend Setup
 
 ```bash
 cd frontend
@@ -231,13 +213,13 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 ```
 
-Run frontend:
+Run:
 
 ```bash
 npm run dev
 ```
 
-Application:
+Frontend available at:
 
 ```text
 http://localhost:5173
@@ -245,62 +227,82 @@ http://localhost:5173
 
 ---
 
-# 🔄 User Workflow
+## 🔄 Validation Workflow
 
 ```text
-Founder enters startup idea
-            │
-            ▼
- AI asks targeted questions
-            │
-            ▼
- Context collection completed
-            │
-            ▼
- Analysis pipeline triggered
-            │
-            ▼
- ├── Market Research
- ├── Competitor Analysis
- ├── User Pain Points
- ├── Risk Assessment
- └── VC Mapping
-            │
-            ▼
- Startup Intelligence Dashboard
-            │
-            ▼
- Export PDF Report
+Founder Idea
+      │
+      ▼
+Idea Discovery Chat
+      │
+      ▼
+Context Collection
+      │
+      ▼
+Parallel Agent Execution
+      │
+      ├── Market Analysis
+      ├── Competitor Analysis
+      ├── User Pain Points
+      ├── Risk Assessment
+      └── VC Mapping
+      │
+      ▼
+Startup Intelligence Dashboard
+      │
+      ▼
+Export Startup Report
 ```
-
-
-
-
-
-### Phase 1
-
-* [x] Startup Idea Discovery
-* [x] Competitor Analysis
-* [x] Market Research
-* [x] Risk Assessment
-
-### Phase 2
-
-* [ ] Advanced Startup Scoring
-* [ ] Founder Collaboration
-* [ ] Real-Time Market Monitoring
-* [ ] Investor CRM Integration
-
-### Phase 3
-
-* [ ] Multi-Agent Autonomous Validation
-* [ ] Predictive Startup Success Scoring
-* [ ] Industry-Specific Validation Models
-* [ ] Enterprise Analytics Dashboard
 
 ---
 
-# 🤝 Contributing
+## 🎯 Use Cases
+
+### Founders
+
+Validate startup ideas before building.
+
+### Startup Teams
+
+Understand competitors and market opportunities.
+
+### Accelerators
+
+Provide structured startup assessments.
+
+### Incubators
+
+Evaluate startup viability at scale.
+
+### Student Entrepreneurs
+
+Receive guided startup validation insights.
+
+---
+
+## 🔮 Roadmap
+
+### Current
+
+* [x] Idea Validation Workflow
+* [x] Competitor Intelligence
+* [x] Market Research
+* [x] Risk Assessment
+* [x] Investor Mapping
+* [x] PDF Report Generation
+
+### Upcoming
+
+* [ ] Advanced Startup Scoring
+* [ ] Real-Time Market Monitoring
+* [ ] Team Collaboration Features
+* [ ] Industry-Specific Validation Models
+* [ ] Startup Benchmarking Engine
+* [ ] Founder Analytics Dashboard
+
+---
+
+## 🤝 Contributing
 
 Contributions are welcome.
 
@@ -311,12 +313,12 @@ Contributions are welcome.
 
 ---
 
-# 📜 License
+## 📜 License
 
 This project is licensed under the MIT License.
 
 ---
 
-# 💡 Vision
+## 💡 Vision
 
-Validly aims to become the operating system for startup validation—helping founders move from idea to evidence through AI-powered intelligence, structured workflows, and actionable insights.
+Validly aims to become the operating system for startup validation—helping founders move from ideas to evidence through AI-powered research, structured intelligence, and actionable recommendations.
